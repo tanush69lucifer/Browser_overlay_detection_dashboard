@@ -48,6 +48,7 @@ Open [http://localhost:5173](http://localhost:5173). Keep the host consistent (`
 
 ## See detector events in the proctor dashboard
 
+
 1. Sign in with an account that exists in the configured database. This checkout does not contain a seed script or guarantee demo logins.
 2. Ensure the candidate is assigned to an exam and the proctor is assigned to that exam.
 3. Open the candidate exam page and start the monitored session.
@@ -79,9 +80,9 @@ Run `cd server && npm run loadtest` with the API running for the health endpoint
 |------|--------|------------------------|
 | Tanush Bhardwaj | tanush69lucifer | Server core, auth, exams, sessions, realtime, deploy |
 | Sohil Malik | Sohil417 | Scoring engine, integrity APIs, load test |
-| Sumit Chaudhary | sumit-chaudhary11 | Client detector, demo overlay extension |
+| Sumit Chaudhary | sumit-chaudhary11 |Proctor live console, drill-down, report |
 | Tanisha Tayal | tanishatayal06 | UI kit, candidate and admin pages |
-| Tanya Goyal | Tanyagoyal14 | Proctor live console, drill-down, reports |
+| Tanya Goyal | Tanyagoyal14 |  Client detector, demo overlay extension | Fully made overlay detector
 
 - Client: React, Vite, Tailwind CSS, React Router, Zustand, Axios, Socket.IO client
 - Server: Node.js, Express, MongoDB/Mongoose, Socket.IO, optional Redis
