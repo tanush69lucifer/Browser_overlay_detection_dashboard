@@ -106,9 +106,7 @@ const getExam = asyncHandler(async (req, res) => {
       throw new ApiError(404, 'NOT_FOUND', 'Exam not found');
     }
     const { candidateIds, fingerprintIds, ...safe } = exam;
-    const fingerprintFilter = { isActive: true };
-    if (fingerprintIds?.length) fingerprintFilter._id = { $in: fingerprintIds };
-    const fingerprints = await Fingerprint.find(fingerprintFilter).sort({ tool: 1 }).lean();
+    const fingerprints = await Fingerprint.find({ isActive: true }).sort({ tool: 1 }).lean();
     return ok(res, { exam: { ...safe, fingerprints } });
   }
 

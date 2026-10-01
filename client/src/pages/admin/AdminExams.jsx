@@ -11,6 +11,7 @@ import ErrorState from '../../components/ui/ErrorState';
 import Input from '../../components/ui/Input';
 import Modal from '../../components/ui/Modal';
 import Skeleton from '../../components/ui/Skeleton';
+import { DEFAULT_FINGERPRINTS } from '../../detector/config';
 
 const EMPTY_FORM = {
   title: '',
@@ -355,40 +356,39 @@ export default function AdminExams() {
   );
 
   const renderFingerprintPicker = () => (
-    <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-950/40 p-3">
+    <div className="space-y-4 rounded-2xl border border-slate-700 bg-slate-950/40 p-4">
       <div>
-        <h4 className="font-medium text-white">Fingerprint set</h4>
-        <p className="mt-1 text-xs text-slate-400">
-          {draft.fingerprintIds.length ? `${draft.fingerprintIds.length} selected` : 'All active fingerprints'}
+        <h4 className="font-medium text-white">Detection checks</h4>
+        <p className="mt-1 text-xs leading-5 text-slate-400">
+          All built-in checks and every active fingerprint from Admin → Fingerprints apply automatically to this exam.
+          Turn off a configured fingerprint there if it should not be used.
         </p>
       </div>
-      <Input
-        value={fingerprintSearch}
-        onChange={(event) => setFingerprintSearch(event.target.value)}
-        placeholder="Search fingerprints"
-      />
-      <div className="flex max-h-40 flex-wrap gap-2 overflow-auto">
-        {filteredFingerprints.length ? filteredFingerprints.map((fingerprint) => {
-          const id = String(fingerprint._id || fingerprint.id);
-          const selected = draft.fingerprintIds.includes(id);
-          return (
-            <button
-              type="button"
-              key={id}
-              aria-pressed={selected}
-              disabled={!fingerprint.isActive && !selected}
-              onClick={() => toggleSelection('fingerprintIds', id)}
-              className={[
-                'rounded-xl border px-2.5 py-2 text-left text-xs transition',
-                selected ? 'border-primary bg-primary/10 text-primary' : 'border-slate-600 bg-slate-900/60 text-slate-200',
-                !fingerprint.isActive && !selected ? 'cursor-not-allowed opacity-50' : '',
-              ].join(' ')}
-            >
-              {fingerprint.name} · {fingerprint.isActive ? fingerprint.severity : 'Inactive'}
-              {fingerprint.allowed ? ' · Allowed' : ''}
-            </button>
-          );
-        }) : <span className="text-xs text-slate-400">No active fingerprints match.</span>}
+      <div>
+        <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">Built-in checks · always on</p>
+        <div className="flex flex-wrap gap-2">
+          {DEFAULT_FINGERPRINTS.map((fingerprint) => (
+            <Badge key={fingerprint.tool} tone="INFO">{fingerprint.tool.replaceAll('_', ' ')}</Badge>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Configured active fingerprints</p>
+          <span className="text-xs text-slate-400">{filteredFingerprints.filter((item) => item.isActive).length} shown</span>
+        </div>
+        <Input
+          value={fingerprintSearch}
+          onChange={(event) => setFingerprintSearch(event.target.value)}
+          placeholder="Search configured fingerprints"
+        />
+        <div className="mt-3 flex max-h-40 flex-wrap gap-2 overflow-auto">
+          {filteredFingerprints.filter((item) => item.isActive).length ? filteredFingerprints.filter((item) => item.isActive).map((fingerprint) => (
+            <Badge key={fingerprint._id || fingerprint.id} tone={fingerprint.allowed ? 'LOW' : fingerprint.severity}>
+              {fingerprint.name}{fingerprint.allowed ? ' · Allowed' : ''}
+            </Badge>
+          )) : <span className="text-xs text-slate-400">No configured active fingerprints match. Built-in checks remain on.</span>}
+        </div>
       </div>
     </div>
   );

@@ -118,22 +118,8 @@ async function processBatch({ sessionId, examId, candidate, signals = [] }) {
     if (sig.code === 'KNOWN_FINGERPRINT') {
       const toolName = cleanMeta.tool;
       const fp = await configCache.getFingerprintByTool(toolName);
-      const selectedForExam = !exam.fingerprintIds?.length
-        || exam.fingerprintIds.some((id) => String(id) === String(fp?._id));
-      // Built-in client fingerprints (including Cluely DOM signatures) may
-      // have no Mongo document. Keep their standard high-risk score. A
-      // configured fingerprint omitted from this exam is still sent to the
-      // live proctor feed above, but does not affect the score.
-      if (fp && !selectedForExam) {
-        acceptedSignals.push({
-          code: sig.code,
-          severity: ['LOW', 'MED', 'HIGH'].includes(sig.severity) ? sig.severity : severity,
-          t,
-          key: cleanKey,
-          meta: cleanMeta,
-        });
-        continue;
-      }
+      // Every active configured fingerprint applies to every exam; per-exam
+      // fingerprint selections must not silently disable active detections.
       if (fp?.allowed) {
         weight = 1;
         severity = 'LOW';
@@ -144,9 +130,7 @@ async function processBatch({ sessionId, examId, candidate, signals = [] }) {
     } else if (sig.code === 'EXTENSION_RESOURCE_PROBE') {
       const configuredTool = cleanMeta.tool;
       const fp = await configCache.getFingerprintByTool(configuredTool);
-      const selectedForExam = !exam.fingerprintIds?.length
-        || exam.fingerprintIds.some((id) => String(id) === String(fp?._id));
-      if (fp && (!selectedForExam || fp.matcherType !== 'EXTENSION_RESOURCE')) {
+      if (fp && fp.matcherType !== 'EXTENSION_RESOURCE') {
         acceptedSignals.push({
           code: sig.code,
           severity: ['LOW', 'MED', 'HIGH'].includes(sig.severity) ? sig.severity : DEFAULT_SEVERITY[sig.code],
