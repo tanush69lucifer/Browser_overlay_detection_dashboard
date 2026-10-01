@@ -18,6 +18,73 @@ export default function Login() {
   const [form, setForm] = useState(initialState);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetSubmitting, setResetSubmitting] = useState(false);
+  const [googleReady, setGoogleReady] = useState(false);
+  const googleButtonRef = useRef(null);
+
+  const handleGoogleCredential = useCallback(async (response) => {
+    if (!response?.credential) {
+      toast.error('Google sign-in did not return a credential');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      await loginWithGoogle(response.credential);
+      toast.success('Signed in with Google');
+      navigate('/');
+    } catch (error) {
+      toast.error(error?.message || 'Unable to sign in with Google');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [loginWithGoogle, navigate]);
+
+  useEffect(() => {
+    if (!googleClientId || !googleButtonRef.current) return undefined;
+    let cancelled = false;
+
+    const renderGoogleButton = () => {
+      if (cancelled || !window.google?.accounts?.id || !googleButtonRef.current) return;
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: handleGoogleCredential,
+      });
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
+        type: 'standard',
+        theme: 'outline',
+        size: 'large',
+        text: 'continue_with',
+        shape: 'rectangular',
+        logo_alignment: 'left',
+        width: 360,
+      });
+      setGoogleReady(true);
+    };
+
+    if (window.google?.accounts?.id) {
+      renderGoogleButton();
+      return () => { cancelled = true; };
+    }
+
+    let script = document.querySelector('script[data-google-identity]');
+    if (!script) {
+      script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      script.dataset.googleIdentity = 'true';
+      document.head.appendChild(script);
+    }
+    script.addEventListener('load', renderGoogleButton);
+    return () => {
+      cancelled = true;
+      script.removeEventListener('load', renderGoogleButton);
+    };
+  }, [handleGoogleCredential]);
 
   useEffect(() => {
     if (user) navigate('/');
@@ -133,11 +200,23 @@ export default function Login() {
 
               <Input
                 label="Password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 name="password"
+                autoComplete="current-password"
                 value={form.password}
                 placeholder="Enter password"
                 error={errors.password}
+                trailing={(
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                    className="rounded p-1 text-slate-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-primary/60"
+                  >
+                    {showPassword ? '🙈' : '👁️'}
+                  </button>
+                )}
                 onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
               />
 
