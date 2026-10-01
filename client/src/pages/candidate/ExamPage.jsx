@@ -136,8 +136,13 @@ export default function ExamPage() {
       try {
         await document.documentElement.requestFullscreen();
       } catch {
-        toast.error('Fullscreen could not be enabled. You can enter fullscreen manually.');
+        toast.error('Fullscreen is required to start the exam. Please try again.');
+        return;
       }
+    }
+    if (!document.fullscreenElement) {
+      toast.error('Fullscreen is required to start the exam. Please try again.');
+      return;
     }
 
     try {
@@ -266,7 +271,14 @@ export default function ExamPage() {
           </p>
 
           <div className="flex justify-end">
-            <Button onClick={startMonitoring}>I understand — Start exam</Button>
+            <Button
+              onClick={startMonitoring}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.preventDefault();
+              }}
+            >
+              I understand — Start exam
+            </Button>
           </div>
         </div>
       </Modal>
@@ -370,6 +382,9 @@ export default function ExamPage() {
               variant="primary"
               loading={submitting}
               onClick={handleSubmit}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.preventDefault();
+              }}
               className="min-w-[150px]"
             >
               Submit

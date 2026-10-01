@@ -585,7 +585,13 @@ export default function AdminExams() {
             <Button variant="ghost" onClick={() => setModalOpen(false)}>
               Cancel
             </Button>
-            <Button loading={submitting} onClick={saveExam}>
+            <Button
+              loading={submitting}
+              onClick={saveExam}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.preventDefault();
+              }}
+            >
               {editingId ? 'Save changes' : 'Create exam'}
             </Button>
           </div>
@@ -601,6 +607,9 @@ export default function AdminExams() {
       >
         <form
           className="space-y-4"
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') event.preventDefault();
+          }}
           onSubmit={(event) => {
             event.preventDefault();
             saveProctor();
