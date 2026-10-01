@@ -11,3 +11,4 @@
 | 7 | Implement processBatch scoring into LOW/MED/HIGH flags per SPEC rules 1-7 | `scoring/score.js` with full signal processing pipeline |
 | 8 | Add session flag timeline and review endpoints with proctor/admin auth | `controllers/flags.controller.js` and flag routes |
 | 9 | Add admin fingerprint and threshold management with validation and cache invalidation | `controllers/fingerprints.controller.js` and admin routes |
+| 10 | Add HTTP fallback batch ingest with session ownership check | `controllers/flags.controller.js` postSignals and route |
