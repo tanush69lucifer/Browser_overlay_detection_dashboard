@@ -384,24 +384,49 @@ export default function AdminExams() {
     return <ErrorState message={fetchError} onRetry={loadData} />;
   }
 
+  const now = Date.now();
+  const liveExamCount = exams.filter((exam) => now >= new Date(exam.startAt).getTime() && now <= new Date(exam.endAt).getTime()).length;
+  const upcomingExamCount = exams.filter((exam) => now < new Date(exam.startAt).getTime()).length;
+  const completedExamCount = exams.length - liveExamCount - upcomingExamCount;
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
+    <div className="relative z-10 space-y-7">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Admin</p>
-          <h1 className="mt-2 text-3xl font-semibold text-white">Exam timeline</h1>
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-primary">Admin workspace</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-4xl">Exam timeline</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-300">Create assessments, assign people, and manage scheduled exam windows.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 sm:justify-end">
           <Button variant="ghost" onClick={() => setProctorModalOpen(true)}>Add proctor</Button>
-          <Button onClick={openCreateModal}>Create exam</Button>
+          <Button onClick={openCreateModal}>+ Create exam</Button>
         </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[
+          { label: 'Live now', value: liveExamCount, tone: 'OK', marker: 'bg-ok' },
+          { label: 'Upcoming', value: upcomingExamCount, tone: 'INFO', marker: 'bg-info' },
+          { label: 'Completed', value: completedExamCount, tone: 'NEUTRAL', marker: 'bg-slate-500' },
+        ].map((stat) => (
+          <Card key={stat.label} className="relative overflow-hidden">
+            <span className={`absolute inset-y-0 left-0 w-1 ${stat.marker}`} />
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm text-slate-300">{stat.label}</p>
+                <p className="mt-2 text-2xl font-semibold text-white num">{stat.value}</p>
+              </div>
+              <Badge tone={stat.tone}>{stat.label}</Badge>
+            </div>
+          </Card>
+        ))}
       </div>
 
       {exams.length ? (
         <Card className="overflow-hidden p-0">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-700 text-left text-sm text-slate-200">
-              <thead className="bg-slate-900/80 text-slate-300">
+              <thead className="sticky top-0 bg-slate-900/95 text-slate-300 backdrop-blur">
                 <tr>
                   <th className="px-4 py-3 font-medium">Title</th>
                   <th className="px-4 py-3 font-medium">Window</th>
@@ -413,7 +438,7 @@ export default function AdminExams() {
               </thead>
               <tbody className="divide-y divide-slate-700">
                 {exams.map((exam) => (
-                  <tr key={exam._id || exam.id} className="bg-surface/40">
+                  <tr key={exam._id || exam.id} className="bg-surface/40 transition-colors hover:bg-slate-800/60">
                     <td className="px-4 py-3 font-medium text-white">{exam.title}</td>
                     <td className="px-4 py-3">
                       <div>{exam.startAt ? new Date(exam.startAt).toLocaleString() : '—'}</div>
