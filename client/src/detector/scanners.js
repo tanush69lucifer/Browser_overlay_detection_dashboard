@@ -7,6 +7,19 @@
 // Heuristic threshold per SPEC: z-index > 9999, area >= 5% of viewport
 const HIGH_Z_INDEX_THRESHOLD = 9999;
 const MIN_AREA_RATIO = 0.05;
+const PERSISTENCE_THRESHOLD_MS = 5000;
+const nodeIds = new WeakMap();
+const nodeFirstSeen = new WeakMap();
+let nextNodeId = 1;
+
+export function getNodeIdentity(node) {
+  let id = nodeIds.get(node);
+  if (!id) {
+    id = nextNodeId++;
+    nodeIds.set(node, id);
+  }
+  return id;
+}
 
 /**
  * Checks if an element is part of legitimate proctor platform UI.
@@ -26,6 +39,7 @@ export function isProctorElement(node) {
 export function scanHighZNodes() {
   const signals = [];
   const viewportArea = window.innerWidth * window.innerHeight;
+  const now = Date.now();
   if (viewportArea <= 0) return signals;
 
   // Scan body children and top-level positioned elements
@@ -47,23 +61,35 @@ export function scanHighZNodes() {
           const area = rect.width * rect.height;
 
           if (area >= viewportArea * MIN_AREA_RATIO) {
-            const key = `${el.tagName}:${zIndex}:${Math.round(area)}`;
+            let observation = nodeFirstSeen.get(el);
+            if (!observation || now - observation.lastSeen > 4500) {
+              observation = { firstSeen: now, lastSeen: now };
+              nodeFirstSeen.set(el, observation);
+            } else {
+              observation.lastSeen = now;
+            }
+            const persistent = now - observation.firstSeen >= PERSISTENCE_THRESHOLD_MS;
             signals.push({
               code: 'FIXED_HIGH_Z_NODE',
-              severity: 'MED',
-              t: Date.now(),
-              key,
+              severity: persistent ? 'HIGH' : 'MED',
+              t: now,
+              key: `node:${getNodeIdentity(el)}`,
               meta: {
                 tagName: el.tagName,
                 zIndex,
                 areaRatio: +(area / viewportArea).toFixed(3),
+                ...(persistent ? { persistentMs: PERSISTENCE_THRESHOLD_MS } : {}),
               },
             });
+          } else {
+            nodeFirstSeen.delete(el);
           }
+        } else {
+          nodeFirstSeen.delete(el);
         }
       }
-    } catch {
-      // Ignore styling access errors on detached nodes
+    } catch (error) {
+      console.warn('[Detector] Unable to inspect positioned node:', error);
     }
   }
 
@@ -85,15 +111,13 @@ export function scanExtensionIframes() {
     if (src.startsWith('chrome-extension://') || src.startsWith('moz-extension://')) {
       try {
         const urlObj = new URL(src);
-        const originKey = urlObj.origin || src.slice(0, 50);
-
         signals.push({
           code: 'EXTENSION_IFRAME',
           severity: 'HIGH',
           t: Date.now(),
-          key: originKey,
+          key: `node:${getNodeIdentity(iframe)}`,
           meta: {
-            src: src.slice(0, 100),
+            extensionOrigin: urlObj.origin || 'extension',
           },
         });
       } catch {
@@ -101,8 +125,8 @@ export function scanExtensionIframes() {
           code: 'EXTENSION_IFRAME',
           severity: 'HIGH',
           t: Date.now(),
-          key: src.slice(0, 50),
-          meta: { src: src.slice(0, 100) },
+          key: `node:${getNodeIdentity(iframe)}`,
+          meta: { extensionOrigin: 'extension' },
         });
       }
     }
@@ -128,7 +152,7 @@ export function scanShadowRoots() {
           code: 'FOREIGN_SHADOW_ROOT',
           severity: 'MED',
           t: Date.now(),
-          key: `${child.tagName}:html_child`,
+          key: `node:${getNodeIdentity(child)}`,
           meta: {
             tagName: child.tagName,
             type: 'HTML_DIRECT_CHILD',
@@ -148,7 +172,7 @@ export function scanShadowRoots() {
         code: 'FOREIGN_SHADOW_ROOT',
         severity: 'MED',
         t: Date.now(),
-        key: `${el.tagName}:shadow`,
+        key: `node:${getNodeIdentity(el)}`,
         meta: {
           tagName: el.tagName,
           type: 'OPEN_SHADOW_ROOT',
@@ -165,14 +189,16 @@ export function scanShadowRoots() {
  * Signal code: DOM_NODE_DELTA (LOW)
  */
 export function checkNodeDelta(baselineCount) {
-  const currentCount = document.body ? document.body.children.length : 0;
+  const currentCount = document.body
+    ? [...document.body.children].filter((child) => !isProctorElement(child)).length
+    : 0;
   if (currentCount > baselineCount) {
     return [
       {
         code: 'DOM_NODE_DELTA',
         severity: 'LOW',
         t: Date.now(),
-        key: 'body_children',
+        key: `body_children:${currentCount}`,
         meta: {
           baseline: baselineCount,
           current: currentCount,

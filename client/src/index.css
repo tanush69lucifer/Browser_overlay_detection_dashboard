@@ -22,3 +22,40 @@ body {
 .num {
   font-variant-numeric: tabular-nums;
 }
+
+@media print {
+  body {
+    background: #fff !important;
+    color: #0f172a !important;
+  }
+
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  header,
+  nav {
+    display: none !important;
+  }
+
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  main *,
+  main *::before,
+  main *::after {
+    color: #0f172a !important;
+    box-shadow: none !important;
+  }
+
+  main > div {
+    gap: 1rem !important;
+  }
+
+  svg {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}

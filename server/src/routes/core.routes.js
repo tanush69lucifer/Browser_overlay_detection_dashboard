@@ -8,8 +8,6 @@ const users = require('../controllers/users.controller');
 const exams = require('../controllers/exams.controller');
 const sessions = require('../controllers/sessions.controller');
 
-const STAFF = ['PROCTOR', 'ADMIN'];
-
 // Auth
 router.post('/auth/register', optionalAuth, validate(v.registerSchema), auth.register);
 router.post('/auth/login', validate(v.loginSchema), auth.login);
@@ -27,8 +25,8 @@ router.patch('/exams/:id', requireAuth, requireRole('ADMIN'), validate(v.updateE
 
 // Sessions
 router.post('/exams/:id/sessions', requireAuth, requireRole('CANDIDATE'), validate(v.startSessionSchema), sessions.startSession);
-router.get('/exams/:id/sessions', requireAuth, requireRole(...STAFF), validate(v.sessionListQuery, 'query'), sessions.listExamSessions);
+router.get('/exams/:id/sessions', requireAuth, requireRole('PROCTOR'), validate(v.sessionListQuery, 'query'), sessions.listExamSessions);
 router.post('/sessions/:id/end', requireAuth, requireRole('CANDIDATE'), validate(v.endSessionSchema), sessions.endSession);
-router.get('/sessions/:id', requireAuth, requireRole(...STAFF), sessions.getSession);
+router.get('/sessions/:id', requireAuth, requireRole('PROCTOR'), sessions.getSession);
 
 module.exports = router;

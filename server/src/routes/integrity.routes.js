@@ -25,7 +25,7 @@ const reportController = require('../controllers/report.controller');
 router.get(
   '/sessions/:id/flags',
   requireAuth,
-  requireRole('PROCTOR', 'ADMIN'),
+  requireRole('PROCTOR'),
   validate(idParamSchema, 'params'),
   flagsController.getSessionFlags
 );
@@ -33,7 +33,7 @@ router.get(
 router.patch(
   '/flags/:id',
   requireAuth,
-  requireRole('PROCTOR', 'ADMIN'),
+  requireRole('PROCTOR'),
   validate(idParamSchema, 'params'),
   validate(patchFlagSchema, 'body'),
   flagsController.patchFlag

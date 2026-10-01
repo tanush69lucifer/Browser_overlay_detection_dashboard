@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Overlay Proctor Browser Companion",
+  "version": "1.0.0",
+  "description": "Reports active-tab URL and title metadata during an explicitly started monitored exam.",
+  "permissions": [
+    "tabs",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}

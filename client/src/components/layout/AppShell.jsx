@@ -7,7 +7,6 @@ const NAV_BY_ROLE = {
   ADMIN: [
     { to: '/admin', label: 'Exams' },
     { to: '/admin/fingerprints', label: 'Fingerprints' },
-    { to: '/proctor', label: 'Proctor' },
   ],
   PROCTOR: [{ to: '/proctor', label: 'My exams' }],
   CANDIDATE: [{ to: '/candidate', label: 'My exams' }],

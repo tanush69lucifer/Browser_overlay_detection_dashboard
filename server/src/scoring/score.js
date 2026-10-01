@@ -3,6 +3,7 @@
 
 const mongoose = require('mongoose');
 const Session = require('../models/Session');
+const Exam = require('../models/Exam');
 const counters = require('../redis/counters');
 const signalWindow = require('../redis/signalWindow');
 const { shouldCount } = require('./debounce');
@@ -14,48 +15,6 @@ const {
 } = require('./weights');
 
 const KNOWN_CODES = new Set(Object.keys(DEFAULT_WEIGHTS));
-const SESSION_CACHE_TTL_MS = 10 * 1000;
-const sessionStatusCache = new Map();
-
-/**
- * Checks whether the session is active or ended (cached for 10 s).
- *
- * @param {string} sessionId
- * @returns {Promise<boolean>} - true if session is ENDED, false if active
- */
-async function isSessionEnded(sessionId) {
-  if (!sessionId) return true;
-  const key = String(sessionId);
-  const now = Date.now();
-
-  const cached = sessionStatusCache.get(key);
-  if (cached && now < cached.expiresAt) {
-    return cached.status === 'ENDED';
-  }
-
-  if (mongoose.connection.readyState !== 1) {
-    return false;
-  }
-
-  let status = 'ONLINE';
-  try {
-    const session = await Session.findById(sessionId).select('status').lean();
-    if (!session || session.status === 'ENDED') {
-      status = 'ENDED';
-    } else {
-      status = session.status;
-    }
-  } catch (err) {
-    // If lookup fails, treat as active to avoid dropping legit signals
-  }
-
-  sessionStatusCache.set(key, {
-    status,
-    expiresAt: now + SESSION_CACHE_TTL_MS,
-  });
-
-  return status === 'ENDED';
-}
 
 /**
  * Sanitizes meta object to ensure small primitives only, never HTML or raw candidate text.
@@ -63,8 +22,26 @@ async function isSessionEnded(sessionId) {
  * @param {any} meta
  * @returns {Object}
  */
-function sanitizeMeta(meta) {
+function sanitizeMeta(meta, code) {
   if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return {};
+  if (code === 'BROWSER_TAB_SWITCH') {
+    let url;
+    try {
+      const parsed = new URL(meta.url);
+      if (!['http:', 'https:'].includes(parsed.protocol)) return {};
+      url = `${parsed.origin}${parsed.pathname}`.slice(0, 200);
+    } catch {
+      return {};
+    }
+    const title = typeof meta.title === 'string'
+      ? meta.title.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 120)
+      : '';
+    return {
+      url,
+      title,
+      isExamTab: meta.isExamTab === true,
+    };
+  }
   const clean = {};
   for (const [k, v] of Object.entries(meta)) {
     if (['string', 'number', 'boolean'].includes(typeof v)) {
@@ -90,15 +67,31 @@ function sanitizeMeta(meta) {
  */
 async function processBatch({ sessionId, examId, candidate, signals = [] }) {
   if (!sessionId || !examId || !Array.isArray(signals) || signals.length === 0) {
-    return { flags: [] };
-  }
-
-  // Rule 7: Ignore batches for sessions that are ENDED (cached 10 s)
-  if (await isSessionEnded(sessionId)) {
-    return { flags: [] };
+    return { flags: [], signals: [] };
   }
 
   const now = Date.now();
+  const [session, exam] = await Promise.all([
+    Session.findById(sessionId).select('examId startedAt endedAt').lean(),
+    Exam.findById(examId).select('startAt endAt fingerprintIds').lean(),
+  ]);
+  if (!session || !exam || String(session.examId) !== String(examId)) {
+    return { flags: [], signals: [] };
+  }
+
+  const earliestSignal = Math.max(
+    new Date(session.startedAt).getTime(),
+    new Date(exam.startAt).getTime()
+  );
+  const latestSignal = Math.min(
+    session.endedAt ? new Date(session.endedAt).getTime() : now,
+    new Date(exam.endAt).getTime(),
+    now
+  );
+  if (!Number.isFinite(earliestSignal) || !Number.isFinite(latestSignal) || earliestSignal > latestSignal) {
+    return { flags: [], signals: [] };
+  }
+
   const countedSignals = [];
 
   // Step 1: Validate, sanitize, debounce, and assign weight/severity
@@ -106,9 +99,11 @@ async function processBatch({ sessionId, examId, candidate, signals = [] }) {
     if (!sig || typeof sig !== 'object') continue;
     if (!KNOWN_CODES.has(sig.code)) continue;
 
-    const t = typeof sig.t === 'number' && sig.t > 0 ? sig.t : now;
+    const t = typeof sig.t === 'number' && Number.isFinite(sig.t) && sig.t > 0 ? sig.t : now;
+    if (t < earliestSignal || t > latestSignal) continue;
     const cleanKey = sig.key ? String(sig.key).slice(0, 200) : undefined;
-    const cleanMeta = sanitizeMeta(sig.meta);
+    const cleanMeta = sanitizeMeta(sig.meta, sig.code);
+    if (sig.code === 'BROWSER_TAB_SWITCH' && !cleanMeta.url) continue;
 
     // Rule 1: Debounce (skip if debounce exists, TTL 60s for keyed, 10s for keyless)
     const allowed = await shouldCount(sessionId, sig.code, cleanKey);
@@ -121,15 +116,24 @@ async function processBatch({ sessionId, examId, candidate, signals = [] }) {
     if (sig.code === 'KNOWN_FINGERPRINT') {
       const toolName = cleanMeta.tool;
       const fp = await configCache.getFingerprintByTool(toolName);
-      if (fp) {
-        if (fp.allowed) {
-          weight = 1;
-          severity = 'LOW';
-        } else {
-          weight = Number(fp.weight) || 10;
-          severity = fp.severity || 'HIGH';
-        }
+      const selectedForExam = !exam.fingerprintIds?.length
+        || exam.fingerprintIds.some((id) => String(id) === String(fp?._id));
+      if (!fp || !selectedForExam) continue;
+      if (fp.allowed) {
+        weight = 1;
+        severity = 'LOW';
+      } else {
+        weight = Number(fp.weight) || 10;
+        severity = fp.severity || 'HIGH';
       }
+    } else if (sig.code === 'FIXED_HIGH_Z_NODE') {
+      const zIndex = Number(cleanMeta.zIndex);
+      const areaRatio = Number(cleanMeta.areaRatio);
+      const persistentMs = Number(cleanMeta.persistentMs);
+      const isPersistentLargeOverlay =
+        zIndex > 9999 && areaRatio >= 0.05 && persistentMs >= 5000;
+      weight = isPersistentLargeOverlay ? 10 : DEFAULT_WEIGHTS.FIXED_HIGH_Z_NODE;
+      severity = isPersistentLargeOverlay ? 'HIGH' : DEFAULT_SEVERITY.FIXED_HIGH_Z_NODE;
     }
 
     countedSignals.push({
@@ -143,7 +147,7 @@ async function processBatch({ sessionId, examId, candidate, signals = [] }) {
   }
 
   if (countedSignals.length === 0) {
-    return { flags: [] };
+    return { flags: [], signals: [] };
   }
 
   // Step 2: Load exam thresholds
@@ -180,7 +184,7 @@ async function processBatch({ sessionId, examId, candidate, signals = [] }) {
   }
 
   if (!flagRaised) {
-    return { flags: [] };
+    return { flags: [], signals: countedSignals };
   }
 
   if (clearWindowNeeded) {
@@ -245,7 +249,7 @@ async function processBatch({ sessionId, examId, candidate, signals = [] }) {
     evidence,
   };
 
-  return { flags: [resultFlag] };
+  return { flags: [resultFlag], signals: countedSignals };
 }
 
 module.exports = { processBatch };

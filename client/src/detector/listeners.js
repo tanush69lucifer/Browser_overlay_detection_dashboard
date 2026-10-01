@@ -4,9 +4,7 @@
  */
 
 const DEVTOOLS_GAP_THRESHOLD = 160;
-const LARGE_PASTE_THRESHOLD = 100;
-
-export function setupListeners(onSignal) {
+export function setupListeners(onSignal, onImmediateSignal = () => {}) {
   // 1. Window Blur (WINDOW_BLUR - LOW)
   const handleBlur = () => {
     onSignal({
@@ -17,41 +15,41 @@ export function setupListeners(onSignal) {
         eventType: 'blur',
       },
     });
+    onImmediateSignal();
   };
 
-  // 2. Tab Hidden (TAB_HIDDEN - LOW)
+  // 2. Tab visibility changes (LOW)
   const handleVisibilityChange = () => {
-    if (document.hidden) {
-      onSignal({
-        code: 'TAB_HIDDEN',
-        severity: 'LOW',
-        t: Date.now(),
-        meta: {
-          visibilityState: document.visibilityState,
-        },
-      });
-    }
+    onSignal({
+      code: document.hidden ? 'TAB_HIDDEN' : 'TAB_VISIBLE',
+      severity: 'LOW',
+      t: Date.now(),
+      meta: { visibilityState: document.visibilityState },
+    });
+    onImmediateSignal();
   };
 
-  // 3. Large Paste (LARGE_PASTE - LOW)
-  // Per SPEC: meta contains small numbers only. NEVER HTML, NEVER text typed or pasted.
-  const handlePaste = (e) => {
-    try {
-      const text = e.clipboardData?.getData('text/plain') || '';
-      if (text.length > LARGE_PASTE_THRESHOLD) {
-        onSignal({
-          code: 'LARGE_PASTE',
-          severity: 'LOW',
-          t: Date.now(),
-          key: 'paste',
-          meta: {
-            length: text.length,
-          },
-        });
-      }
-    } catch {
-      // Ignore clipboard read permission errors safely
-    }
+  // 3. Paste event (LOW). Do not inspect clipboard contents.
+  const handlePaste = () => {
+    onSignal({
+      code: 'PASTE_EVENT',
+      severity: 'LOW',
+      t: Date.now(),
+      meta: { eventType: 'paste' },
+    });
+    onImmediateSignal();
+  };
+
+  // Fullscreen exit while exam monitoring is active (metadata only).
+  const handleFullscreenChange = () => {
+    if (document.fullscreenElement) return;
+    onSignal({
+      code: 'FULLSCREEN_EXIT',
+      severity: 'LOW',
+      t: Date.now(),
+      meta: { eventType: 'fullscreen-exit' },
+    });
+    onImmediateSignal();
   };
 
   // 4. DevTools Open Heuristic (DEVTOOLS_OPEN - LOW)
@@ -81,6 +79,7 @@ export function setupListeners(onSignal) {
   window.addEventListener('blur', handleBlur);
   document.addEventListener('visibilitychange', handleVisibilityChange);
   window.addEventListener('paste', handlePaste, true);
+  document.addEventListener('fullscreenchange', handleFullscreenChange);
   window.addEventListener('resize', checkDevTools);
 
   // Initial check for DevTools
@@ -91,6 +90,7 @@ export function setupListeners(onSignal) {
     window.removeEventListener('blur', handleBlur);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
     window.removeEventListener('paste', handlePaste, true);
+    document.removeEventListener('fullscreenchange', handleFullscreenChange);
     window.removeEventListener('resize', checkDevTools);
   };
 }

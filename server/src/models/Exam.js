@@ -18,6 +18,7 @@ const examSchema = new mongoose.Schema(
     sensitivity: { type: String, enum: SENSITIVITIES, default: 'MEDIUM' },
     candidateIds: [{ type: ObjectId, ref: 'User' }],
     proctorIds: [{ type: ObjectId, ref: 'User' }],
+    fingerprintIds: [{ type: ObjectId, ref: 'Fingerprint' }],
     fingerprintSetId: { type: ObjectId, default: null },
     questions: { type: [questionSchema], default: [] },
     createdBy: { type: ObjectId, ref: 'User' },

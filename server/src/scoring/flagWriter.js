@@ -35,6 +35,19 @@ async function flush() {
     await Flag.insertMany(toWrite, { ordered: false });
   } catch (err) {
     console.error('flagWriter insertMany error:', err.message);
+    try {
+      const persisted = await Flag.countDocuments({ _id: { $in: toWrite.map((flag) => flag._id) } });
+      if (persisted !== toWrite.length) {
+        buffer = [...toWrite, ...buffer];
+        isFlushing = false;
+        return;
+      }
+    } catch (verifyError) {
+      console.error('flagWriter persistence verification failed:', verifyError.message);
+      buffer = [...toWrite, ...buffer];
+      isFlushing = false;
+      return;
+    }
   }
 
   try {
