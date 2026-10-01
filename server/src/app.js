@@ -1,5 +1,6 @@
 const express = require('express');
 const helmet = require('helmet');
+const metricsRoutes = require('./routes/metrics.routes');
 const cors = require('cors');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
@@ -35,6 +36,7 @@ app.use('/api/v1/auth', authLimiter);
 
 app.use('/api/v1', coreRoutes);
 app.use('/api/v1', integrityRoutes);
+app.use('/api/v1', metricsRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
