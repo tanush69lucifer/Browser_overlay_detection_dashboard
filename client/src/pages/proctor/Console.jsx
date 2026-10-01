@@ -54,7 +54,7 @@ function signalDescription(item) {
     return [meta.name, meta.tool].filter(Boolean).join(' · ') || 'Configured fingerprint matched';
   }
   if (item.code === 'PASTE_EVENT') return 'Paste event captured; clipboard content is not collected.';
-  if (item.code === 'FULLSCREEN_EXIT') return 'Candidate left fullscreen during the exam.';
+  if (item.code === 'FULLSCREEN_EXIT') return 'Candidate left fullscreen; answering is locked until fullscreen is restored.';
   if (item.code === 'TAB_HIDDEN') return 'Exam tab became hidden.';
   if (item.code === 'TAB_VISIBLE') return 'Exam tab became visible again.';
   if (item.code === 'WINDOW_BLUR') return 'Exam window lost focus.';
@@ -391,7 +391,7 @@ export default function Console() {
         <aside className="space-y-3">
           <div>
             <h2 className="text-xl font-semibold text-white">Live signal and flag feed</h2>
-            <p className="mt-1 text-sm text-slate-400">Focus events are signals; scoring thresholds determine when a flag is raised.</p>
+            <p className="mt-1 text-sm text-slate-400">Fullscreen exits raise an immediate high-severity flag; other focus signals are scored by threshold.</p>
           </div>
           <Card className="max-h-[38rem] space-y-3 overflow-y-auto p-3">
             {feed.length ? feed.map((item) => (

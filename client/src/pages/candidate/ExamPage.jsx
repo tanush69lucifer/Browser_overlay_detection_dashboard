@@ -42,6 +42,7 @@ export default function ExamPage() {
   const [remainingMs, setRemainingMs] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [fullscreenLost, setFullscreenLost] = useState(false);
 
   const cleanupSession = () => {
     if (stopDetectorRef.current) {
@@ -110,6 +111,17 @@ export default function ExamPage() {
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
   }, [exam, monitoringStarted, sessionStartedAt]);
+
+  useEffect(() => {
+    if (!monitoringStarted || submitted) return undefined;
+
+    const updateFullscreenState = () => {
+      setFullscreenLost(!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', updateFullscreenState);
+    updateFullscreenState();
+    return () => document.removeEventListener('fullscreenchange', updateFullscreenState);
+  }, [monitoringStarted, submitted]);
 
   useEffect(() => {
     if (!monitoringStarted || remainingMs > 0 || submitted || !sessionId) return;
@@ -205,6 +217,14 @@ export default function ExamPage() {
       stopDetectorRef.current = stop;
     } catch (err) {
       toast.error(err?.message || 'Unable to start the monitored exam');
+    }
+  };
+
+  const restoreFullscreen = async () => {
+    try {
+      await document.documentElement.requestFullscreen();
+    } catch {
+      toast.error('Please use the button to return to fullscreen and continue your exam.');
     }
   };
 
@@ -307,7 +327,14 @@ export default function ExamPage() {
           </Card>
         </div>
       ) : (
-        <div className="mx-auto max-w-5xl px-4 py-6">
+        <div
+          className={[
+            'mx-auto max-w-5xl px-4 py-6 transition-[filter] duration-150',
+            fullscreenLost ? 'pointer-events-none select-none blur-md' : '',
+          ].join(' ')}
+          aria-hidden={fullscreenLost}
+          inert={fullscreenLost}
+        >
           <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-slate-700 bg-surface/70 p-4 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Active exam</p>
@@ -402,6 +429,26 @@ export default function ExamPage() {
               Submit
             </Button>
           </div>
+        </div>
+      )}
+      {fullscreenLost && !submitted && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 px-4 backdrop-blur-md"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="fullscreen-required-title"
+          aria-describedby="fullscreen-required-description"
+        >
+          <Card className="w-full max-w-lg border-amber-400/50 bg-slate-900 text-center shadow-2xl">
+            <div className="space-y-4">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/15 text-2xl text-amber-300">!</div>
+              <h2 id="fullscreen-required-title" className="text-xl font-semibold text-white">Return to fullscreen to continue</h2>
+              <p id="fullscreen-required-description" className="text-sm leading-6 text-slate-300">
+                Answering is locked behind this screen. Your exam timer continues, and your proctor has been notified that fullscreen was exited. Return to fullscreen to continue answering.
+              </p>
+              <Button onClick={restoreFullscreen}>Return to fullscreen</Button>
+            </div>
+          </Card>
         </div>
       )}
     </div>
