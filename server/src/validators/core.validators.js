@@ -20,6 +20,16 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+const googleLoginSchema = z.object({
+  credential: z.string().min(100).max(10000),
+});
+
+const forgotPasswordSchema = z.object({ email });
+const resetPasswordSchema = z.object({
+  token: z.string().regex(/^[a-f\d]{64}$/i, 'Invalid or expired reset link'),
+  password: z.string().min(8, 'Password must be at least 8 characters').max(100),
+});
+
 const listQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
@@ -81,6 +91,9 @@ const endSessionSchema = z.object({
 module.exports = {
   registerSchema,
   loginSchema,
+  googleLoginSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
   listQuery,
   userListQuery,
   sessionListQuery,

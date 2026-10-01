@@ -22,6 +22,14 @@ export const useAuth = create((set) => ({
     return user;
   },
 
+  loginWithGoogle: async (credential) => {
+    const { token, user } = await api.post('/auth/google', { credential });
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(user));
+    set({ token, user });
+    return user;
+  },
+
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
