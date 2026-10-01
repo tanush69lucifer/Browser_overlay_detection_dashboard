@@ -11,6 +11,7 @@ import ErrorState from '../../components/ui/ErrorState';
 import Input from '../../components/ui/Input';
 import Modal from '../../components/ui/Modal';
 import Skeleton from '../../components/ui/Skeleton';
+import { DEFAULT_FINGERPRINTS } from '../../detector/config';
 
 const EMPTY_FORM = {
   title: '',
@@ -205,6 +206,24 @@ export default function AdminExams() {
     });
   };
 
+  const toggleFingerprint = (fingerprintId) => {
+    const activeIds = fingerprints
+      .filter((fingerprint) => fingerprint.isActive)
+      .map((fingerprint) => String(fingerprint._id || fingerprint.id));
+    setDraft((current) => {
+      const selectedIds = current.fingerprintIds.length
+        ? current.fingerprintIds
+        : activeIds;
+      const nextIds = selectedIds.includes(fingerprintId)
+        ? selectedIds.filter((id) => id !== fingerprintId)
+        : [...selectedIds, fingerprintId];
+      return {
+        ...current,
+        fingerprintIds: nextIds.length === activeIds.length ? [] : nextIds,
+      };
+    });
+  };
+
   const updateQuestion = (index, field, value) => {
     setDraft((current) => ({
       ...current,
@@ -355,40 +374,83 @@ export default function AdminExams() {
   );
 
   const renderFingerprintPicker = () => (
-    <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-950/40 p-3">
-      <div>
-        <h4 className="font-medium text-white">Fingerprint set</h4>
-        <p className="mt-1 text-xs text-slate-400">
-          {draft.fingerprintIds.length ? `${draft.fingerprintIds.length} selected` : 'All active fingerprints'}
+    <div className="space-y-4 rounded-2xl border border-slate-700 bg-slate-950/40 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+        <h4 className="font-medium text-white">Detection checks</h4>
+        <p className="mt-1 text-xs leading-5 text-slate-400">
+          Built-in checks are always on. Choose which active configured fingerprints apply to this exam.
         </p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          className="shrink-0 px-3 py-2 text-xs"
+          onClick={() => setDraft((current) => ({ ...current, fingerprintIds: [] }))}
+        >
+          Select all active
+        </Button>
       </div>
-      <Input
-        value={fingerprintSearch}
-        onChange={(event) => setFingerprintSearch(event.target.value)}
-        placeholder="Search fingerprints"
-      />
-      <div className="flex max-h-40 flex-wrap gap-2 overflow-auto">
-        {filteredFingerprints.length ? filteredFingerprints.map((fingerprint) => {
-          const id = String(fingerprint._id || fingerprint.id);
-          const selected = draft.fingerprintIds.includes(id);
-          return (
-            <button
-              type="button"
-              key={id}
-              aria-pressed={selected}
-              disabled={!fingerprint.isActive && !selected}
-              onClick={() => toggleSelection('fingerprintIds', id)}
-              className={[
-                'rounded-xl border px-2.5 py-2 text-left text-xs transition',
-                selected ? 'border-primary bg-primary/10 text-primary' : 'border-slate-600 bg-slate-900/60 text-slate-200',
-                !fingerprint.isActive && !selected ? 'cursor-not-allowed opacity-50' : '',
-              ].join(' ')}
-            >
-              {fingerprint.name} · {fingerprint.isActive ? fingerprint.severity : 'Inactive'}
-              {fingerprint.allowed ? ' · Allowed' : ''}
-            </button>
-          );
-        }) : <span className="text-xs text-slate-400">No active fingerprints match.</span>}
+      <div>
+        <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">Built-in checks · always on</p>
+        <div className="flex flex-wrap gap-2">
+          {DEFAULT_FINGERPRINTS.map((fingerprint) => (
+            <Badge key={fingerprint.tool} tone="INFO">{fingerprint.tool.replaceAll('_', ' ')}</Badge>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Configured fingerprints</p>
+          <span className="text-xs text-slate-400">
+            {draft.fingerprintIds.length === 0
+              ? `${fingerprints.filter((item) => item.isActive).length} active · all selected`
+              : `${draft.fingerprintIds.length} selected`}
+          </span>
+        </div>
+        <Input
+          value={fingerprintSearch}
+          onChange={(event) => setFingerprintSearch(event.target.value)}
+          placeholder="Search configured fingerprints"
+        />
+        <div className="mt-3 flex max-h-40 flex-wrap gap-2 overflow-auto">
+          {filteredFingerprints.length ? filteredFingerprints.map((fingerprint) => {
+            const id = String(fingerprint._id || fingerprint.id);
+            const selected = draft.fingerprintIds.length === 0
+              ? fingerprint.isActive
+              : draft.fingerprintIds.includes(id);
+            const severityTone = fingerprint.allowed ? 'LOW' : fingerprint.severity;
+            return (
+              <button
+                type="button"
+                key={id}
+                aria-pressed={selected}
+                disabled={!fingerprint.isActive && !draft.fingerprintIds.includes(id)}
+                onClick={() => toggleFingerprint(id)}
+                className={[
+                  'inline-flex min-h-10 items-center gap-2 rounded-xl border px-3 py-2 text-left text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+                  selected
+                    ? 'border-primary/70 bg-primary/15 text-white'
+                    : 'border-slate-700 bg-slate-900/70 text-slate-300 hover:border-slate-500',
+                  !fingerprint.isActive ? 'cursor-not-allowed opacity-45' : '',
+                ].join(' ')}
+              >
+                <span
+                  aria-hidden="true"
+                  className={[
+                    'flex h-4 w-4 items-center justify-center rounded border text-[10px] font-bold',
+                    selected ? 'border-primary bg-primary text-white' : 'border-slate-500 text-transparent',
+                  ].join(' ')}
+                >
+                  ✓
+                </span>
+                <span>{fingerprint.name}</span>
+                <Badge tone={severityTone}>{fingerprint.allowed ? 'Allowed' : fingerprint.severity}</Badge>
+                {!fingerprint.isActive ? <span className="text-slate-500">Inactive</span> : null}
+              </button>
+            );
+          }) : <span className="text-xs text-slate-400">No configured fingerprints match. Built-in checks remain on.</span>}
+        </div>
       </div>
     </div>
   );
@@ -594,41 +656,63 @@ export default function AdminExams() {
 
           {renderFingerprintPicker()}
 
-          <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-950/40 p-3">
-            <div className="flex items-center justify-between">
-              <h4 className="font-medium text-white">Questions</h4>
+          <div className="space-y-4 rounded-2xl border border-slate-700 bg-slate-950/40 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h4 className="font-medium text-white">Questions</h4>
+                <p className="mt-1 text-xs leading-5 text-slate-400">
+                  Add options for a multiple-choice question, or leave options empty for a written response.
+                </p>
+              </div>
               <Button variant="ghost" onClick={addQuestion}>
-                Add question
+                + Add question
               </Button>
             </div>
 
             {draft.questions.map((question, questionIndex) => (
-              <div key={question._id || questionIndex} className="rounded-xl border border-slate-700 bg-slate-900/50 p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium text-slate-200">Question {questionIndex + 1}</span>
+              <div key={question._id || questionIndex} className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-4 shadow-inner shadow-slate-950/20">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <span className="inline-flex items-center gap-2 text-sm font-medium text-slate-200">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-xs text-indigo-200">
+                      {questionIndex + 1}
+                    </span>
+                    Question
+                  </span>
                   {draft.questions.length > 1 ? (
-                    <button type="button" className="text-xs text-red-300" onClick={() => removeQuestion(questionIndex)}>
+                    <button
+                      type="button"
+                      className="rounded-lg px-2.5 py-1.5 text-xs text-red-300 transition hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60"
+                      onClick={() => removeQuestion(questionIndex)}
+                    >
                       Remove
                     </button>
                   ) : null}
                 </div>
 
-                <Input
+                <textarea
                   value={question.text}
                   onChange={(event) => updateQuestion(questionIndex, 'text', event.target.value)}
-                  placeholder="Question text"
+                  rows={3}
+                  aria-label={`Question ${questionIndex + 1} text`}
+                  className="w-full resize-y rounded-xl border border-slate-600 bg-slate-950/70 px-3 py-3 text-sm leading-6 text-text placeholder:text-slate-500 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  placeholder="Write the question or problem statement..."
                 />
 
                 <div className="mt-3">
+                  <label htmlFor={`question-options-${questionIndex}`} className="mb-2 block text-xs font-medium uppercase tracking-wider text-slate-400">
+                    Answer options <span className="font-normal normal-case tracking-normal text-slate-500">(optional)</span>
+                  </label>
                   <textarea
+                    id={`question-options-${questionIndex}`}
                     value={(question.options || []).join(', ')}
                     onChange={(event) =>
                       updateQuestion(questionIndex, 'options', event.target.value.split(',').map((option) => option.trim()))
                     }
-                    rows={3}
-                    className="w-full rounded-xl border border-slate-600 bg-slate-900/80 px-3 py-2.5 text-sm text-text placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    placeholder="Options separated by commas"
+                    rows={2}
+                    className="w-full resize-y rounded-xl border border-slate-600 bg-slate-900/80 px-3 py-2.5 text-sm text-text placeholder:text-slate-500 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="Example: Option A, Option B, Option C"
                   />
+                  <p className="mt-1.5 text-xs text-slate-500">Leave this blank when candidates should type a written answer, including code.</p>
                 </div>
               </div>
             ))}

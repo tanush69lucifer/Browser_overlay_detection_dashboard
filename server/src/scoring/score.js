@@ -120,10 +120,8 @@ async function processBatch({ sessionId, examId, candidate, signals = [] }) {
       const fp = await configCache.getFingerprintByTool(toolName);
       const selectedForExam = !exam.fingerprintIds?.length
         || exam.fingerprintIds.some((id) => String(id) === String(fp?._id));
-      // Built-in client fingerprints (including Cluely DOM signatures) may
-      // have no Mongo document. Keep their standard high-risk score. A
-      // configured fingerprint omitted from this exam is still sent to the
-      // live proctor feed above, but does not affect the score.
+      // Built-in client fingerprints have no Mongo document and retain their
+      // standard scoring. Configured fingerprints score only when selected.
       if (fp && !selectedForExam) {
         acceptedSignals.push({
           code: sig.code,

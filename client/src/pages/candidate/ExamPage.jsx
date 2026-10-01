@@ -134,13 +134,10 @@ export default function ExamPage() {
 
     try {
       setSubmitting(true);
+      let signalsDelivered = true;
       if (stopDetectorRef.current) {
         const stopDetector = stopDetectorRef.current;
-        const signalsDelivered = await stopDetector.flush();
-        if (!signalsDelivered) {
-          toast.error('Monitoring events are still queued. Check your connection and submit again.');
-          return;
-        }
+        signalsDelivered = await stopDetector.flush();
         stopDetectorRef.current = null;
         await stopDetector();
       }
@@ -148,6 +145,9 @@ export default function ExamPage() {
       setSubmitted(true);
       cleanupSession();
       toast.success('Exam submitted successfully');
+      if (!signalsDelivered) {
+        toast('Some monitoring events could not be synced before submission.', { icon: '⚠️' });
+      }
     } catch (err) {
       toast.error(err?.message || 'Unable to submit your exam');
     } finally {
@@ -393,14 +393,19 @@ export default function ExamPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
+                      <label htmlFor={`answer-${questionIndex}`} className="block text-sm font-medium text-slate-200">
+                        Your answer
+                      </label>
                       <textarea
+                        id={`answer-${questionIndex}`}
                         value={choiceValue}
                         onChange={(event) => updateAnswer(questionIndex, event.target.value)}
-                        rows={5}
-                        className="w-full rounded-xl border border-slate-600 bg-slate-900/80 px-3 py-2.5 text-sm text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        placeholder="Type your response here..."
+                        rows={8}
+                        className="w-full resize-y rounded-xl border border-slate-600 bg-slate-900/80 px-4 py-3 text-sm leading-6 text-text placeholder:text-slate-500 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        placeholder="Write your answer here..."
                       />
+                      <p className="text-xs text-slate-500">You can enter a written response or type code as text. Answers are reviewed by your proctor.</p>
                     </div>
                   )}
                 </Card>

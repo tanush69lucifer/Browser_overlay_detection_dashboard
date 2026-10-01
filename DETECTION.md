@@ -18,10 +18,12 @@ This engine introduces a **lightweight, privacy-first client-side detector** run
 
 ## 2. Detection Techniques & Signals
 
-The candidate detector combines a `MutationObserver`, periodic DOM scans, configured
-fingerprints, and browser event metadata. Fingerprints are limited to the set selected
-for the active exam. Detection is heuristic: browser JavaScript cannot inspect every
-extension, another application, or browser-protected surface.
+The candidate detector combines a `MutationObserver`, periodic DOM scans, built-in
+fingerprints, the active configured fingerprints selected for the exam, and browser
+event metadata. Built-in checks always run; configured fingerprints are selected per
+exam from the active rules maintained by Admin. Detection is heuristic: browser
+JavaScript cannot inspect every extension, another application, or browser-protected
+surface.
 
 | Code | Severity | Default Weight | Technique & Detection Logic | Trigger Condition |
 | :--- | :---: | :---: | :--- | :--- |

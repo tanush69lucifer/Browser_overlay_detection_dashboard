@@ -151,7 +151,7 @@ export function startDetector({ socket, sessionId, fingerprints = [], onExtensio
       .catch(error => console.warn('[Detector] Extension resource probe failed:', error));
   }
 
-  return async function stop() {
+  const stop = async function stop() {
     if (stopped) return batcher.flush();
     stopped = true;
     if (mutationTimer !== null) clearTimeout(mutationTimer);
@@ -164,6 +164,8 @@ export function startDetector({ socket, sessionId, fingerprints = [], onExtensio
     onExtensionStatus(false);
     return batcher.stop();
   };
+  stop.flush = () => batcher.flush();
+  return stop;
 }
 
 export default startDetector;
