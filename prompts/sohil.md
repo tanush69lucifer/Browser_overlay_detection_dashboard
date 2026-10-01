@@ -12,3 +12,4 @@
 | 8 | Add session flag timeline and review endpoints with proctor/admin auth | `controllers/flags.controller.js` and flag routes |
 | 9 | Add admin fingerprint and threshold management with validation and cache invalidation | `controllers/fingerprints.controller.js` and admin routes |
 | 10 | Add HTTP fallback batch ingest with session ownership check | `controllers/flags.controller.js` postSignals and route |
+| 11 | Add integrity report per candidate with CSV download export | `controllers/report.controller.js` and report route |
