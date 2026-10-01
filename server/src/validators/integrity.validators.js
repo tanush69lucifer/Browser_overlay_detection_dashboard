@@ -80,6 +80,7 @@ const updateThresholdSchema = z.object({
 
 const reportQuerySchema = z.object({
   format: z.enum(['json', 'csv']).default('json').optional(),
+  range: z.enum(['24h', '7d', '30d', 'all']).default('all').optional(),
 });
 
 const paginationQuerySchema = z.object({

@@ -9,6 +9,7 @@ import Card from '../../components/ui/Card';
 import EmptyState from '../../components/ui/EmptyState';
 import ErrorState from '../../components/ui/ErrorState';
 import Skeleton from '../../components/ui/Skeleton';
+import ReviewAnalytics from './ReviewAnalytics';
 
 const severityKeys = { LOW: 'low', MED: 'medium', HIGH: 'high' };
 
@@ -23,19 +24,20 @@ export default function Report() {
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [exportingCandidates, setExportingCandidates] = useState(false);
+  const [range, setRange] = useState('all');
 
   const loadReport = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
-      const result = await getExamReport(examId);
+      const result = await getExamReport(examId, { range });
       setReport(result);
     } catch (err) {
       setError(err?.message || 'Unable to load the exam report');
     } finally {
       setLoading(false);
     }
-  }, [examId]);
+  }, [examId, range]);
 
   useEffect(() => {
     loadReport();
@@ -94,18 +96,17 @@ export default function Report() {
 
   const reviewStats = useMemo(() => {
     const reviewed = (report?.flags || []).filter((flag) => flag.reviewed);
-    const cleared = reviewed.filter((flag) => flag.verdict === 'CLEARED').length;
     return {
       total: report?.flags?.length || 0,
       reviewed: reviewed.length,
-      clearedShare: reviewed.length ? Math.round((cleared / reviewed.length) * 100) : null,
+      coverage: report?.flags?.length ? Math.round((reviewed.length / report.flags.length) * 100) : 0,
     };
   }, [report]);
 
   const exportCsv = async () => {
     try {
       setExporting(true);
-      const blob = await downloadExamReport(examId);
+      const blob = await downloadExamReport(examId, { range });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -130,7 +131,7 @@ export default function Report() {
         return `"${safe.replace(/"/g, '""')}"`;
       };
       const rows = [
-        ['candidate_name', 'candidate_email', 'session_status', 'flags', 'low', 'medium', 'high', 'reviewed'],
+        ['candidate_name', 'candidate_email', 'session_status', 'flags', 'low', 'medium', 'high', 'reviewed', 'range'],
         ...candidateRows.map((candidate) => [
           candidate.name,
           candidate.email,
@@ -140,6 +141,7 @@ export default function Report() {
           candidate.medium,
           candidate.high,
           `${candidate.reviewed}/${candidate.count}`,
+          range,
         ]),
       ];
       const blob = new Blob([rows.map((row) => row.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
@@ -187,18 +189,23 @@ export default function Report() {
         <Card><p className="text-sm text-slate-400">Candidates</p><p className="num mt-2 text-2xl font-semibold text-white">{candidateRows.length}</p></Card>
         <Card><p className="text-sm text-slate-400">Flags for review</p><p className="num mt-2 text-2xl font-semibold text-white">{reviewStats.total}</p></Card>
         <Card>
-          <p className="text-sm text-slate-400">Cleared verdict share</p>
-          <p className="num mt-2 text-2xl font-semibold text-white">{reviewStats.clearedShare === null ? 'Not available' : `${reviewStats.clearedShare}%`}</p>
-          <p className="mt-1 text-xs text-slate-400">
-            {reviewStats.reviewed} of {reviewStats.total} flags reviewed; this is a human-cleared share, not a validated false-positive rate.
-          </p>
+          <p className="text-sm text-slate-400">Flag review coverage</p>
+          <p className="num mt-2 text-2xl font-semibold text-white">{reviewStats.coverage}%</p>
+          <p className="mt-1 text-xs text-slate-400">{reviewStats.reviewed} of {reviewStats.total} flags marked reviewed in this range.</p>
         </Card>
       </div>
 
+      <ReviewAnalytics
+        analytics={report.analytics}
+        flags={report.flags || []}
+        range={range}
+        onRangeChange={setRange}
+      />
+
       <Card>
         <div className="mb-4">
-          <h2 className="text-lg font-semibold text-white">Flags by type and severity</h2>
-          <p className="mt-1 text-sm text-slate-400">Only persisted flags are counted; raw monitoring signals are excluded.</p>
+          <h2 className="text-lg font-semibold text-white">Raised flags by signal type and severity</h2>
+          <p className="mt-1 text-sm text-slate-400">This chart counts persisted review flags; detector-signal counts are shown above.</p>
         </div>
         {chartRows.length ? (
           <div className="h-80 w-full">
