@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { createExam, createProctor, getFingerprints, getUsers, updateExam } from '../../api/admin';
+import { createCandidate, createExam, createProctor, getFingerprints, getUsers, updateExam } from '../../api/admin';
 import { getExam, getExams } from '../../api/exams';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -67,11 +67,14 @@ export default function AdminExams() {
   const [fetchError, setFetchError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [proctorModalOpen, setProctorModalOpen] = useState(false);
+  const [candidateModalOpen, setCandidateModalOpen] = useState(false);
+  const [candidateDraft, setCandidateDraft] = useState({ name: '', email: '', password: '' });
   const [proctorDraft, setProctorDraft] = useState({ name: '', email: '', password: '' });
   const [draft, setDraft] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [creatingProctor, setCreatingProctor] = useState(false);
+  const [creatingCandidate, setCreatingCandidate] = useState(false);
   const [candidateSearch, setCandidateSearch] = useState('');
   const [proctorSearch, setProctorSearch] = useState('');
   const [fingerprintSearch, setFingerprintSearch] = useState('');
@@ -288,6 +291,30 @@ export default function AdminExams() {
     }
   };
 
+  const saveCandidate = async () => {
+    const name = candidateDraft.name.trim();
+    const email = candidateDraft.email.trim();
+    if (name.length < 2 || !email || candidateDraft.password.length < 8) {
+      toast.error('Enter a name, valid email, and password of at least 8 characters');
+      return;
+    }
+
+    try {
+      setCreatingCandidate(true);
+      const result = await createCandidate({ name, email, password: candidateDraft.password });
+      const createdUser = result?.user;
+      if (!createdUser?._id) throw new Error('Candidate account was created, but the user details were not returned');
+      setCandidates((current) => mergeUsers(current, [createdUser]));
+      setCandidateDraft({ name: '', email: '', password: '' });
+      setCandidateModalOpen(false);
+      toast.success('Candidate account created and added to the assignment list');
+    } catch (err) {
+      toast.error(err?.message || 'Unable to create candidate account');
+    } finally {
+      setCreatingCandidate(false);
+    }
+  };
+
   const renderAssignmentPicker = (title, items, selectedIds, search, setSearch, field) => (
     <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-950/40 p-3">
       <div className="flex items-center justify-between gap-2">
@@ -398,6 +425,7 @@ export default function AdminExams() {
           <p className="mt-2 text-sm leading-6 text-slate-300">Create assessments, assign people, and manage scheduled exam windows.</p>
         </div>
         <div className="flex flex-wrap gap-2 sm:justify-end">
+          <Button variant="ghost" onClick={() => setCandidateModalOpen(true)}>Add candidate</Button>
           <Button variant="ghost" onClick={() => setProctorModalOpen(true)}>Add proctor</Button>
           <Button onClick={openCreateModal}>+ Create exam</Button>
         </div>
@@ -668,6 +696,54 @@ export default function AdminExams() {
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" onClick={() => setProctorModalOpen(false)}>Cancel</Button>
             <Button type="submit" loading={creatingProctor}>Create proctor</Button>
+          </div>
+        </form>
+      </Modal>
+      <Modal
+        open={candidateModalOpen}
+        onClose={() => setCandidateModalOpen(false)}
+        title="Create candidate account"
+        description="Create a candidate login and add the account to the candidate assignment list."
+        size="md"
+      >
+        <form
+          className="space-y-4"
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') event.preventDefault();
+          }}
+          onSubmit={(event) => {
+            event.preventDefault();
+            saveCandidate();
+          }}
+        >
+          <Input
+            label="Name"
+            autoComplete="name"
+            required
+            minLength={2}
+            value={candidateDraft.name}
+            onChange={(event) => setCandidateDraft((current) => ({ ...current, name: event.target.value }))}
+          />
+          <Input
+            label="Email"
+            type="email"
+            autoComplete="email"
+            required
+            value={candidateDraft.email}
+            onChange={(event) => setCandidateDraft((current) => ({ ...current, email: event.target.value }))}
+          />
+          <Input
+            label="Temporary password"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            value={candidateDraft.password}
+            onChange={(event) => setCandidateDraft((current) => ({ ...current, password: event.target.value }))}
+          />
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setCandidateModalOpen(false)}>Cancel</Button>
+            <Button type="submit" loading={creatingCandidate}>Create candidate</Button>
           </div>
         </form>
       </Modal>

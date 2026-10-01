@@ -1,6 +1,7 @@
 import api from './client';
 
 export const getUsers = (params = {}) => api.get('/users', { params });
+export const createCandidate = (payload) => api.post('/auth/register', { ...payload, role: 'CANDIDATE' });
 export const createProctor = (payload) => api.post('/auth/register', { ...payload, role: 'PROCTOR' });
 export const createExam = (payload) => api.post('/exams', payload);
 export const updateExam = (examId, payload) => api.patch(`/exams/${examId}`, payload);
