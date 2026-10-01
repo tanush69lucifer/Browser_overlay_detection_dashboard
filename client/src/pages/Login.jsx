@@ -90,29 +90,31 @@ export default function Login() {
                 onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
               />
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <label htmlFor="login-password" className="text-sm font-medium text-slate-100">Password</label>
+              <div className="flex w-full flex-col gap-2 text-sm text-slate-200">
+                <label htmlFor="login-password" className="font-medium text-slate-100">Password</label>
+                <div className="relative">
+                  <input
+                    id="login-password"
+                    type={showPassword ? 'text' : 'password'}
+                    name="password"
+                    autoComplete="current-password"
+                    value={form.password}
+                    placeholder="Enter password"
+                    aria-invalid={Boolean(errors.password)}
+                    className={`w-full rounded-xl border bg-slate-900/80 px-3 py-2.5 pr-12 text-sm text-text placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 ${errors.password ? 'border-red-500/70' : 'border-slate-600'}`}
+                    onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+                  />
                   <button
                     type="button"
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                     aria-pressed={showPassword}
                     onClick={() => setShowPassword((current) => !current)}
-                    className="rounded-md text-xs font-medium text-primary hover:text-indigo-300 focus:outline-none focus:ring-2 focus:ring-primary/60"
+                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-lg text-slate-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary/60"
                   >
-                    {showPassword ? 'Hide' : 'Show'}
+                    {showPassword ? '🙈' : '👁️'}
                   </button>
                 </div>
-                <Input
-                  id="login-password"
-                  type={showPassword ? 'text' : 'password'}
-                  name="password"
-                  autoComplete="current-password"
-                  value={form.password}
-                  placeholder="Enter password"
-                  error={errors.password}
-                  onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-                />
+                {errors.password ? <span className="text-xs text-red-300">{errors.password}</span> : null}
               </div>
 
               <Button type="submit" className="w-full" loading={submitting}>
