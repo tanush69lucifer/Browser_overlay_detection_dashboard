@@ -13,3 +13,5 @@
 | 9 | Add admin fingerprint and threshold management with validation and cache invalidation | `controllers/fingerprints.controller.js` and admin routes |
 | 10 | Add HTTP fallback batch ingest with session ownership check | `controllers/flags.controller.js` postSignals and route |
 | 11 | Add integrity report per candidate with CSV download export | `controllers/report.controller.js` and report route |
+| 12 | Implement socket.io concurrent client load tester with latency percentiles | `server/loadtest/spawnClients.js` |
+| 13 | Document load test methodology, metrics, architecture and bottlenecks | `LOADTEST.md` |
