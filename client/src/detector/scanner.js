@@ -20,6 +20,7 @@ export function createScanner() {
   const reportedIframes = new WeakSet();
   const reportedDeltas = new Set();
   let baseline = null;
+  let initialTreeScanned = false;
 
   function checkNode(el) {
     if (!(el instanceof Element) || !el.isConnected || excluded(el)) return [];
@@ -75,9 +76,22 @@ export function createScanner() {
 
   function scanTopLevel(queuedNodes = []) {
     const signals = [];
-    const nodes = new Set(queuedNodes);
-    for (const el of document.documentElement?.children || []) nodes.add(el);
-    for (const el of document.body?.children || []) nodes.add(el);
+    const nodes = new Set();
+    const addTree = root => {
+      if (!(root instanceof Element)) return;
+      nodes.add(root);
+      for (const child of root.querySelectorAll('*')) nodes.add(child);
+      // Shadow roots are detected on their host in checkNode(); do not scan
+      // their contents, which could include platform-owned UI in a proctor root.
+    };
+    if (!initialTreeScanned) {
+      addTree(document.documentElement);
+      initialTreeScanned = true;
+    } else {
+      for (const node of queuedNodes) addTree(node);
+      for (const el of document.documentElement?.children || []) nodes.add(el);
+      for (const el of document.body?.children || []) nodes.add(el);
+    }
     for (const node of nodes) signals.push(...checkNode(node));
     signals.push(...checkTopLevelCounts());
     return signals;

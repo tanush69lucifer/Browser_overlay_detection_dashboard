@@ -1,10 +1,90 @@
 # Overlay Proctor: PS 05
 
-Overlay Proctor is an exam-integrity dashboard for online assessments. During an exam, its browser-based detector looks for signals associated with AI assistant overlays and browser extensions, then sends compact alerts to a live proctor dashboard for human review. The system is designed to support load testing with up to 500 concurrent candidate sessions.
+Overlay Proctor is an exam-integrity dashboard for online assessments. Its client-side detector looks for browser-visible signals associated with injected overlays and extensions, then sends compact signals to the backend for scoring and human review. A signal is an indicator for review, not proof of misconduct.
 
-The detector uses browser-visible signals such as known extension fingerprints, injected high-layer page elements, focus changes, and tab visibility. It does not record keystrokes, read pasted text, or use a camera. A signal is an indicator for review; it is not proof of misconduct.
+The detector does not record keystrokes, keep pasted text, or capture the screen or camera. A paste signal contains only the character count.
+
+## Features
+
+- Candidate, proctor, and admin experiences with role-based access.
+- Exam creation, candidate sessions, answer submission, and live proctor updates.
+- Browser-side detection for high-z overlays, known/configurable fingerprints, extension iframes, open Shadow DOM, DOM growth, focus/visibility changes, large paste length, and a DevTools heuristic.
+- Signal batching over Socket.IO with an HTTP fallback, plus a 12-second session heartbeat.
+- Configurable fingerprints and sensitivity thresholds.
+- Redis-backed realtime counters when configured; single-instance in-memory fallback otherwise.
+
+## Requirements
+
+- Node.js and npm.
+- A MongoDB database (local or Atlas).
+- Redis is optional for local single-server development.
+
+## Run locally (Windows PowerShell)
+
+Open two PowerShell terminals from the repository root.
+
+### 1. Configure and start the backend
+
+```powershell
+cd server
+npm ci
+Copy-Item .env.example .env
+notepad .env
+npm run dev
+```
+
+Set at least `MONGO_URI` to your MongoDB connection string and `JWT_SECRET` to a private random secret. Keep the real values in `server/.env`; `.env` files are ignored by Git. Leave `REDIS_URL` empty for single-instance development.
+
+The API and Socket.IO server listens on `http://localhost:5000`. Check it at [http://localhost:5000/health](http://localhost:5000/health); a running server returns `{"success":true,"data":{"status":"ok"}}`.
+
+### 2. Configure and start the client
+
+In the second terminal, from the repository root:
+
+```powershell
+cd client
+npm ci
+Copy-Item .env.example .env
+npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173). Keep the browser origin consistent with `CLIENT_URL` in `server/.env`; if you use `127.0.0.1` instead of `localhost`, add that origin to `CLIENT_URL` too.
+
+## Run the detector test bench
+
+Open [http://localhost:5173/detector-test.html](http://localhost:5173/detector-test.html). Its controls create local test DOM elements and show detected signals in the table:
+
+1. Inject a fixed high-z overlay.
+2. Add an extension iframe.
+3. Attach an open Shadow DOM root.
+4. Add a direct child to `<html>`.
+5. Add a Sider/Monica fingerprint.
+6. Simulate a large paste, blur, or DevTools viewport gap.
+
+The test bench uses a mock socket, so its signals are displayed locally and are not saved to MongoDB or sent to the proctor dashboard. For end-to-end monitoring, sign in to the app, start an exam session, and inspect the proctor dashboard.
+
+## Accounts and demo data
+
+This checkout does not include `server/src/seed.js`, so there is no seed command or guaranteed set of demo credentials. Login requires accounts already present in the configured MongoDB database. Public registration creates candidate accounts; admin/proctor accounts must be provisioned through an authorized admin workflow.
+
+## Cluely and browser visibility limits
+
+The detector includes a best-effort Cluely fingerprint for matching page DOM identifiers/classes containing `cluely`. It can also report focus and visibility changes. It cannot identify Cluely by brand when Cluely draws as a separate desktop/native window or browser-chrome overlay outside the exam page DOM. Browser heuristics can miss overlays and can produce false positives; proctors should review signals in context. See [DETECTION.md](DETECTION.md) for signal details and limitations.
+
+## Project docs
+
+- [Detection behavior and privacy](DETECTION.md)
+- [API, data model, signals, and realtime contracts](SPEC.md)
+- Demo extension instructions: [demo-overlay/README.md](demo-overlay/README.md)
+
+## Tech stack
+
+- **Client:** React 18, Vite, Tailwind CSS 4, React Router, Zustand, Axios, Socket.IO client, and Recharts.
+- **Server:** Node.js, Express, MongoDB with Mongoose, Socket.IO, and optional Redis.
+- **Authentication and validation:** JWT, bcrypt, and Zod.
 
 ## Team
+
 | Name | GitHub | Primary responsibility |
 |------|--------|------------------------|
 | Tanush Bhardwaj | tanush69lucifer | Server core, auth, exams, sessions, realtime, deploy |
@@ -12,53 +92,3 @@ The detector uses browser-visible signals such as known extension fingerprints, 
 | Sumit Chaudhary | sumit-chaudhary11 | Client detector, demo overlay extension |
 | Tanisha Tayal | tanishatayal06 | UI kit, candidate and admin pages |
 | Tanya Goyal | Tanyagoyal14 | Proctor live console, drill-down, reports |
-
-## Live Links
-- Frontend: TODO
-- Backend: TODO
-- Demo video: TODO
-
-## Tech Stack
-- **Client:** React 18, Vite, Tailwind CSS 4, React Router, Zustand, Axios, Socket.IO client, and Recharts.
-- **Server:** Node.js, Express, MongoDB with Mongoose, Socket.IO, and Redis (optional, with in-memory fallbacks for Redis-backed features).
-- **Authentication and validation:** JWT, bcrypt, and Zod.
-
-## Features
-- Role-based experiences for candidates, proctors, and administrators.
-- Exam creation and assignment, candidate exam sessions, and answer submission.
-- Browser-side overlay and extension signal detection, including configurable fingerprints and sensitivity thresholds.
-- Live proctor monitoring with session status, severity summaries, incoming flags, and candidate drill-down reports.
-- Real-time signal delivery over Socket.IO with an HTTP fallback when the socket is unavailable.
-- JSON and CSV exam reports, plus a seeded demo environment and load-test tooling.
-
-## Architecture
-The React client hosts the candidate exam, detector, admin pages, and live proctor console. The Express API handles authentication, exams, sessions, fingerprints, thresholds, and reports. Candidate clients batch small signal records and send them to the server; the scoring service applies debounce and sensitivity thresholds, stores review flags, and publishes updates to proctors over Socket.IO. MongoDB stores application records, while Redis supports live counters, signal windows, debounce keys, and the Socket.IO adapter when configured.
-
-See [SPEC.md](SPEC.md) for API, data model, signal, and realtime event details.
-
-## Detection: what we can and cannot detect
-See [DETECTION.md](DETECTION.md).
-
-## Scale: load test results
-See [LOADTEST.md](LOADTEST.md).
-
-## Local Setup
-1. `git clone https://github.com/tanush69lucifer/Browser_overlay_detection_dashboard.git && cd Browser_overlay_detection_dashboard`
-2. `cd server && npm install && cp .env.example .env` (fill values)
-3. `npm run seed && npm run dev`
-4. `cd ../client && npm install && cp .env.example .env && npm run dev`
-
-## Test Credentials
-| Role | Email | Password |
-|---|---|---|
-| Admin | admin@demo.com | Admin@123 |
-| Proctor | proctor@demo.com | Proctor@123 |
-| Candidate | candidate@demo.com | Candidate@123 |
-
-## API Documentation
-See the endpoint table in [SPEC.md](SPEC.md#5-rest-endpoints).
-
-## Known Limitations
-- Detection is limited to information available inside the browser page. Physical second devices, undetectable OS-level overlays, and other activity outside the browser sandbox cannot be observed.
-- Browser heuristics can produce false positives or miss overlays that do not expose detectable fingerprints or page changes. Proctors should review flags in context.
-- The live deployment URLs and demo video have not been filled in yet.

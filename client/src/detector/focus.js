@@ -6,9 +6,13 @@ export function startFocusSignals(onSignal) {
   const onBlur = () => emit(SIGNAL_CODES.WINDOW_BLUR, 'window-blur');
   const onVisibility = () => { if (document.hidden) emit(SIGNAL_CODES.TAB_HIDDEN, 'tab-hidden'); };
   let recentPageCopyAt = 0;
-  const onCopy = () => { recentPageCopyAt = Date.now(); };
+  const onCopy = event => {
+    // Only suppress a following paste when the copy originated in this exam
+    // document. Clipboard contents are never read or retained.
+    if (event.target instanceof Node && document.contains(event.target)) recentPageCopyAt = Date.now();
+  };
   const onPaste = event => {
-    const text = event.clipboardData?.getData('text') || '';
+    const text = event.clipboardData?.getData('text/plain') || '';
     const copiedFromThisPage = recentPageCopyAt > 0 && Date.now() - recentPageCopyAt <= 5000;
     recentPageCopyAt = 0;
     if (copiedFromThisPage) return;
