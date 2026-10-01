@@ -8,7 +8,8 @@
     "start": "node src/index.js",
     "seed": "node src/seed.js",
     "loadtest": "node loadtest/spawnClients.js",
-    "loadtest:prepare": "node loadtest/prepare.js"
+    "loadtest:prepare": "node loadtest/prepare.js",
+    "lint": "eslint src"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
@@ -28,6 +29,9 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "globals": "^17.13.0",
     "nodemon": "^3.1.7",
     "socket.io-client": "^4.8.1"
   }
