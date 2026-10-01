@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Browser Overlay Detector Demo",
+  "version": "1.0.0",
+  "description": "Injects a controlled in-page overlay to test the exam integrity detector.",
+  "permissions": [],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

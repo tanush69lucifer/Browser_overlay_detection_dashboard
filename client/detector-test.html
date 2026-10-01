@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Overlay detector test</title>
+  <style>
+    :root { color-scheme: dark; font: 15px/1.5 system-ui, sans-serif; color: #e2e8f0; background: #0b1220; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; }
+    main { width: min(850px, 100%); margin: 0 auto; padding: 38px 24px 80px; }
+    .exam { padding: 28px; border: 1px solid #334155; border-radius: 16px; background: #172235; }
+    .badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 999px; color: #bbf7d0; background: #14532d66; font-size: 13px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; }
+    h1 { margin: 18px 0 6px; font-size: clamp(24px, 4vw, 34px); }
+    h2 { margin: 26px 0 8px; font-size: 19px; }
+    p { color: #cbd5e1; }
+    label { display: block; margin: 18px 0 8px; font-weight: 600; }
+    textarea { width: 100%; min-height: 120px; resize: vertical; padding: 12px; border: 1px solid #475569; border-radius: 8px; color: inherit; background: #0f172a; }
+    .hint { color: #94a3b8; font-size: 13px; }
+
+    /* This test-page panel is our own UI, so the detector must ignore it. */
+    #flag-panel[data-proctor="1"] { position: fixed; z-index: 20; top: 16px; right: 16px; width: min(360px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding: 16px; border: 1px solid #334155; border-radius: 14px; background: #111c2e; box-shadow: 0 16px 50px #0008; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .panel-head strong { font-size: 16px; }
+    #count { min-width: 28px; padding: 2px 8px; border-radius: 999px; text-align: center; color: #cbd5e1; background: #334155; font-size: 12px; }
+    #empty { margin: 0; padding: 12px; border-radius: 9px; color: #94a3b8; background: #1e293b; font-size: 13px; }
+    #flags { display: grid; gap: 9px; }
+    .flag { padding: 11px 12px; border-left: 4px solid #64748b; border-radius: 8px; background: #1e293b; }
+    .flag.HIGH { border-color: #f87171; }
+    .flag.MED { border-color: #fbbf24; }
+    .flag.LOW { border-color: #60a5fa; }
+    .flag-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .code { overflow-wrap: anywhere; font-size: 12px; font-weight: 750; letter-spacing: .02em; }
+    .severity { padding: 2px 7px; border-radius: 999px; color: #cbd5e1; background: #334155; font-size: 10px; font-weight: 700; }
+    .reason { margin: 6px 0 0; color: #dbe4f0; font-size: 13px; }
+    .time { margin-top: 6px; color: #94a3b8; font-size: 11px; }
+    @media (max-width: 700px) {
+      #flag-panel[data-proctor="1"] { top: auto; right: 10px; bottom: 10px; width: min(360px, calc(100vw - 20px)); max-height: 42vh; }
+      main { padding-top: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <main data-proctor="1">
+    <section class="exam" data-proctor="1">
+      <span class="badge"><span class="dot"></span>Integrity monitoring active</span>
+      <h1>Detector test page</h1>
+      <p>This is sample exam content. Detector signals will appear in the panel on the right.</p>
+      <h2>Sample question</h2>
+      <p>Explain how a browser reports visibility changes to a web page.</p>
+      <label for="answer">Your answer</label>
+      <textarea id="answer" placeholder="Type a sample answer here"></textarea>
+      <p class="hint">Try switching tabs, pasting 100+ characters, or loading the demo extension. A paste within 5 seconds of copying on this page is ignored.</p>
+    </section>
+  </main>
+
+  <aside id="flag-panel" data-proctor="1" aria-live="polite" aria-label="Detector flags">
+    <div class="panel-head"><strong>Detector flags</strong><span id="count">0</span></div>
+    <p id="empty">No flags yet. Waiting for detector signals…</p>
+    <div id="flags"></div>
+  </aside>
+
+  <script type="module">
+    import { startDetector } from '/src/detector/index.js';
+
+    const flagList = document.querySelector('#flags');
+    const empty = document.querySelector('#empty');
+    const count = document.querySelector('#count');
+    let flagCount = 0;
+    const reasons = {
+      FIXED_HIGH_Z_NODE: signal => `A ${signal.meta?.tag || 'page element'} is fixed/absolute, has z-index ${signal.meta?.zIndex ?? '?'}, and covers ${signal.meta?.areaPct ?? '?'}% of the screen.`,
+      KNOWN_FINGERPRINT: signal => `Known ${signal.meta?.tool || 'extension'} footprint found (${signal.meta?.match || signal.meta?.matcherType || 'configured matcher'}). This is a best-effort match.`,
+      FOREIGN_SHADOW_ROOT: signal => `An open Shadow DOM root was found on a ${signal.meta?.tag || 'page element'}.`,
+      EXTENSION_IFRAME: signal => `An iframe uses the ${signal.meta?.scheme || 'browser-extension'} URL scheme.`,
+      DOM_NODE_DELTA: signal => `The ${signal.meta?.target || 'page'} gained ${signal.meta?.delta ?? '?'} top-level elements.`,
+      WINDOW_BLUR: () => 'The exam browser window lost focus. This is a supporting signal, not proof of misuse.',
+      TAB_HIDDEN: () => 'The exam tab became hidden. This is a supporting signal, not proof of misuse.',
+      LARGE_PASTE: signal => `${signal.meta?.length ?? '?'} characters were pasted from outside this page. The pasted text is not collected.`,
+      DEVTOOLS_OPEN: () => 'The window-size heuristic suggests DevTools may be open. This is not reliable proof.'
+    };
+
+    function addFlag(signal) {
+      flagCount += 1;
+      count.textContent = String(flagCount);
+      empty.hidden = true;
+
+      const card = document.createElement('article');
+      card.className = `flag ${signal.severity || 'LOW'}`;
+      const header = document.createElement('div');
+      header.className = 'flag-top';
+      const code = document.createElement('span');
+      code.className = 'code';
+      code.textContent = signal.code || 'UNKNOWN_SIGNAL';
+      const severity = document.createElement('span');
+      severity.className = 'severity';
+      severity.textContent = signal.severity || 'LOW';
+      header.append(code, severity);
+
+      const reason = document.createElement('p');
+      reason.className = 'reason';
+      reason.textContent = reasons[signal.code]?.(signal) || 'Integrity metadata was reported for proctor review.';
+      const time = document.createElement('div');
+      time.className = 'time';
+      time.textContent = new Date(signal.t || Date.now()).toLocaleTimeString();
+      card.append(header, reason, time);
+      flagList.prepend(card);
+      while (flagList.children.length > 30) flagList.lastElementChild.remove();
+    }
+
+    const socket = {
+      connected: true,
+      emit(event, payload, ack) {
+        console.log(event, payload);
+        if (event === 'signals:batch') payload.signals.forEach(addFlag);
+        ack?.({ ok: true });
+      },
+      on() {},
+      off() {}
+    };
+
+    const detector = startDetector({ socket, sessionId: 'test', fingerprints: [] });
+    window.addEventListener('pagehide', () => detector.stop(), { once: true });
+  </script>
+</body>
+</html>
