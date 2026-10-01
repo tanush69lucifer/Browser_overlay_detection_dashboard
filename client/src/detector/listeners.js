@@ -40,13 +40,14 @@ export function setupListeners(onSignal, onImmediateSignal = () => {}) {
     onImmediateSignal();
   };
 
-  // Fullscreen exit while exam monitoring is active (metadata only).
+  // Fullscreen exit is high severity; the candidate UI locks until fullscreen returns.
   const handleFullscreenChange = () => {
     if (document.fullscreenElement) return;
     onSignal({
       code: 'FULLSCREEN_EXIT',
-      severity: 'LOW',
+      severity: 'HIGH',
       t: Date.now(),
+      key: `fullscreen-exit:${Date.now()}`,
       meta: { eventType: 'fullscreen-exit' },
     });
     onImmediateSignal();

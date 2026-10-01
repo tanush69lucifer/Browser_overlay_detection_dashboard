@@ -34,7 +34,7 @@ extension, another application, or browser-protected surface.
 | **`TAB_HIDDEN`** | **LOW** | 2 | **Visibility API Transition**<br>`document.addEventListener('visibilitychange')` | Exam tab moved to background or minimized (`document.hidden === true`). |
 | **`BROWSER_TAB_SWITCH`** | **LOW** | 1 | **Optional Manifest V3 companion**<br>Uses the browser tabs API only during an explicitly started exam. | Active HTTP(S) tab changes; reports sanitized origin/path, title, and whether the candidate returned to the exam tab. |
 | **`PASTE_EVENT`** | **LOW** | 1 | **Paste event metadata**<br>Observes the paste event only. | A paste event occurs. Clipboard contents and length are not read. |
-| **`FULLSCREEN_EXIT`** | **LOW** | 1 | **Fullscreen state**<br>`fullscreenchange` event. | Candidate exits fullscreen while monitoring is active. |
+| **`FULLSCREEN_EXIT`** | **HIGH** | 10 | **Fullscreen state**<br>`fullscreenchange` event; locks and blurs the candidate exam until fullscreen is restored. | Candidate exits fullscreen while monitoring is active; immediately raises a high-severity flag for the proctor. |
 | **`DEVTOOLS_OPEN`** | **LOW** | 2 | **Viewport Differential Heuristic**<br>Measures differential between outer and inner window dimensions. | Gap $(window.outer - window.inner) > 160\text{px}$. |
 
 ---

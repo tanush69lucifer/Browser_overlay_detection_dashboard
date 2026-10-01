@@ -155,7 +155,7 @@ Proctor client rules: keep **connection** (ONLINE/OFFLINE/ENDED) and **maxSeveri
 
 **Scoring (server/src/scoring, owner Sohil)**
 1. **Debounce:** skip a signal if `debounce:{sessionId}:{code}:{key}` exists, otherwise set it. TTL 60 s for keyed signals, 10 s for keyless ones.
-2. **Weight:** `DEFAULT_WEIGHTS[code]`. `KNOWN_FINGERPRINT` uses the fingerprint's weight (matched by `meta.tool`). A fingerprint marked `allowed` counts as weight 1, severity LOW.
+2. **Weight:** `DEFAULT_WEIGHTS[code]`. `KNOWN_FINGERPRINT` uses the fingerprint's weight (matched by `meta.tool`). A fingerprint marked `allowed` counts as weight 1, severity LOW. `FULLSCREEN_EXIT` is weight 10 / HIGH and raises a high-severity flag immediately.
 3. **Window:** add weights to the session's sliding window (`win:{sessionId}`, length `threshold.windowMs` for the exam's sensitivity).
 4. **Raise at most one flag per batch:** any counted HIGH signal -> HIGH flag. Otherwise if window sum >= `flagScore` -> MED if the window has a MED signal, else LOW. After a window-based flag, clear the window.
 5. Flag `code` = code of the highest-weight signal. `evidence.signals` = the counted signals of this batch.

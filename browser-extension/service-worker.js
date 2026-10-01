@@ -26,6 +26,12 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
   }
 });
 
+chrome.runtime.onStartup.addListener(() => {
+  void injectIntoOpenExamTabs().catch((error) => {
+    console.error('[Overlay Proctor] Unable to reconnect restored exam tabs:', error.message);
+  });
+});
+
 async function readSession() {
   const stored = await chrome.storage.session.get(SESSION_KEY);
   return stored[SESSION_KEY] || null;

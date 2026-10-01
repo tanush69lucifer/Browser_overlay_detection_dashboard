@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../store/auth';
@@ -8,13 +8,10 @@ import Card from '../components/ui/Card';
 import api from '../api/client';
 
 const initialState = { email: '', password: '' };
-const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
 export default function Login() {
   const navigate = useNavigate();
   const user = useAuth((state) => state.user);
   const login = useAuth((state) => state.login);
-  const loginWithGoogle = useAuth((state) => state.loginWithGoogle);
   const [form, setForm] = useState(initialState);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -22,70 +19,6 @@ export default function Login() {
   const [forgotMode, setForgotMode] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetSubmitting, setResetSubmitting] = useState(false);
-  const [googleReady, setGoogleReady] = useState(false);
-  const googleButtonRef = useRef(null);
-
-  const handleGoogleCredential = useCallback(async (response) => {
-    if (!response?.credential) {
-      toast.error('Google sign-in did not return a credential');
-      return;
-    }
-
-    try {
-      setSubmitting(true);
-      await loginWithGoogle(response.credential);
-      toast.success('Signed in with Google');
-      navigate('/');
-    } catch (error) {
-      toast.error(error?.message || 'Unable to sign in with Google');
-    } finally {
-      setSubmitting(false);
-    }
-  }, [loginWithGoogle, navigate]);
-
-  useEffect(() => {
-    if (!googleClientId || !googleButtonRef.current) return undefined;
-    let cancelled = false;
-
-    const renderGoogleButton = () => {
-      if (cancelled || !window.google?.accounts?.id || !googleButtonRef.current) return;
-      window.google.accounts.id.initialize({
-        client_id: googleClientId,
-        callback: handleGoogleCredential,
-      });
-      window.google.accounts.id.renderButton(googleButtonRef.current, {
-        type: 'standard',
-        theme: 'outline',
-        size: 'large',
-        text: 'continue_with',
-        shape: 'rectangular',
-        logo_alignment: 'left',
-        width: 360,
-      });
-      setGoogleReady(true);
-    };
-
-    if (window.google?.accounts?.id) {
-      renderGoogleButton();
-      return () => { cancelled = true; };
-    }
-
-    let script = document.querySelector('script[data-google-identity]');
-    if (!script) {
-      script = document.createElement('script');
-      script.src = 'https://accounts.google.com/gsi/client';
-      script.async = true;
-      script.defer = true;
-      script.dataset.googleIdentity = 'true';
-      document.head.appendChild(script);
-    }
-    script.addEventListener('load', renderGoogleButton);
-    return () => {
-      cancelled = true;
-      script.removeEventListener('load', renderGoogleButton);
-    };
-  }, [handleGoogleCredential]);
-
   useEffect(() => {
     if (user) navigate('/');
   }, [user, navigate]);
@@ -225,35 +158,6 @@ export default function Login() {
               </Button>
             </form>}
 
-            {!forgotMode ? (
-              <>
-                <div className="my-5 flex items-center gap-3" aria-hidden="true">
-                  <span className="h-px flex-1 bg-slate-700" />
-                  <span className="text-xs uppercase tracking-wider text-slate-500">or</span>
-                  <span className="h-px flex-1 bg-slate-700" />
-                </div>
-
-                {googleClientId ? (
-                  <div className="flex min-h-10 justify-center" aria-label="Continue with Google">
-                    <div ref={googleButtonRef} />
-                    {!googleReady ? <span className="sr-only">Loading Google sign-in</span> : null}
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    disabled
-                    title="Configure VITE_GOOGLE_CLIENT_ID to enable Google sign-in"
-                    className="flex w-full items-center justify-center gap-3 rounded-xl border border-slate-600 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 opacity-70"
-                  >
-                    <GoogleMark />
-                    Continue with Google
-                  </button>
-                )}
-                {!googleClientId ? (
-                  <p className="mt-2 text-center text-xs text-slate-500">Google sign-in needs OAuth setup by the app administrator.</p>
-                ) : null}
-              </>
-            ) : null}
           </Card>
         </div>
       </div>
