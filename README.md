@@ -61,6 +61,7 @@ The server scores signals according to exam sensitivity and fingerprint configur
 The ordinary exam page can observe focus and visibility but cannot read another tab's URL. The optional Manifest V3 companion in `browser-extension` uses the browser tabs permission to report the active HTTP(S) tab's origin/path and title during an active exam. It strips query strings and fragments and does not read page text, keystrokes, clipboard contents, screen, or browsing history.
 
 For local Chrome/Edge development, enable Developer mode on the browser extensions page, select **Load unpacked**, and choose this repository's `browser-extension` folder. After updating an existing unpacked install, press its **Reload** button once. The companion can connect to an already-open candidate exam tab; confirm the exam page shows **Browser companion connected**, then activate another HTTP(S) tab or navigate that active tab to generate a URL/title event. Copying a URL without switching tabs or navigating does not generate an event. Without the companion, ordinary focus/visibility signals still work, but other-tab URLs and titles are unavailable.
+Its scalability
 
 ## Project docs and load test
 
