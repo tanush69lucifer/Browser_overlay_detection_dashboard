@@ -9,6 +9,7 @@ import {
 import { setupListeners } from './listeners.js';
 import { createBatcher } from './batcher.js';
 import { startHeartbeat } from './heartbeat.js';
+import { probeExtensionResource } from './extensionProbe.js';
 
 /** Start the browser-visible integrity detector for an active exam session. */
 export function startDetector({ socket, sessionId, fingerprints = [], onExtensionStatus = () => {} }) {
@@ -115,6 +116,33 @@ export function startDetector({ socket, sessionId, fingerprints = [], onExtensio
   const scanTimer = setInterval(runDomScan, 2000);
   const stopListeners = setupListeners(signal => batcher.enqueue(signal), () => batcher.flush());
   const stopHeartbeat = startHeartbeat({ socket, sessionId });
+
+  // Probe once per configured resource at session start; do not repeat this
+  // network request on every mutation/periodic DOM scan.
+  const probeFingerprints = fingerprints.filter(fp => fp?.matcherType === 'EXTENSION_RESOURCE' && fp.isActive !== false);
+  for (const fp of probeFingerprints) {
+    probeExtensionResource({ extensionId: fp.matcher, resourcePath: fp.resourcePath || 'probe.svg' })
+      .then(result => {
+        if (stopped || result.status !== 'DETECTED') return;
+        const tool = String(fp.tool || fp.name || 'CONFIGURED_EXTENSION').slice(0, 64);
+        batcher.enqueue({
+          code: 'EXTENSION_RESOURCE_PROBE',
+          severity: fp.allowed ? 'LOW' : (fp.severity || 'MED'),
+          weight: fp.allowed ? 1 : (Number(fp.weight) || 4),
+          t: Date.now(),
+          key: `extension-resource:${result.extensionId}:${result.resourcePath}`,
+          meta: {
+            tool,
+            extensionId: result.extensionId,
+            resourcePath: result.resourcePath,
+            result: 'RESOURCE_REACHABLE',
+            allowed: Boolean(fp.allowed),
+            limitation: 'Positive resource reachability only; this does not identify extension behavior.',
+          },
+        });
+      })
+      .catch(error => console.warn('[Detector] Extension resource probe failed:', error));
+  }
 
   return async function stop() {
     if (stopped) return batcher.flush();

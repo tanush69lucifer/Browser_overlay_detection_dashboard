@@ -141,6 +141,28 @@ async function processBatch({ sessionId, examId, candidate, signals = [] }) {
         weight = Number(fp.weight) || 10;
         severity = fp.severity || 'HIGH';
       }
+    } else if (sig.code === 'EXTENSION_RESOURCE_PROBE') {
+      const configuredTool = cleanMeta.tool;
+      const fp = await configCache.getFingerprintByTool(configuredTool);
+      const selectedForExam = !exam.fingerprintIds?.length
+        || exam.fingerprintIds.some((id) => String(id) === String(fp?._id));
+      if (fp && (!selectedForExam || fp.matcherType !== 'EXTENSION_RESOURCE')) {
+        acceptedSignals.push({
+          code: sig.code,
+          severity: ['LOW', 'MED', 'HIGH'].includes(sig.severity) ? sig.severity : DEFAULT_SEVERITY[sig.code],
+          t,
+          key: cleanKey,
+          meta: cleanMeta,
+        });
+        continue;
+      }
+      if (fp?.allowed) {
+        weight = 1;
+        severity = 'LOW';
+      } else if (fp) {
+        weight = Number(fp.weight) || DEFAULT_WEIGHTS[sig.code];
+        severity = fp.severity || DEFAULT_SEVERITY[sig.code];
+      }
     } else if (sig.code === 'FIXED_HIGH_Z_NODE') {
       const zIndex = Number(cleanMeta.zIndex);
       const areaRatio = Number(cleanMeta.areaRatio);

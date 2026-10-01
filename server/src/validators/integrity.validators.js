@@ -36,25 +36,41 @@ const signalsBatchSchema = z.object({
 const createFingerprintSchema = z.object({
   name: z.string().min(1).max(100).trim(),
   tool: z.string().min(1).max(100).trim(),
-  matcherType: z.enum(['SELECTOR', 'IFRAME_SRC', 'GLOBAL_VAR']),
+  matcherType: z.enum(['SELECTOR', 'IFRAME_SRC', 'GLOBAL_VAR', 'EXTENSION_RESOURCE']),
   matcher: z.string().min(1).trim(),
+  resourcePath: z.string().max(200).optional(),
   weight: z.number().int().min(1).default(10),
   severity: z.enum(['LOW', 'MED', 'HIGH']).default('HIGH'),
   description: z.string().max(500).default('').optional(),
   isActive: z.boolean().default(true).optional(),
   allowed: z.boolean().default(false).optional(),
+}).refine((value) => value.matcherType !== 'EXTENSION_RESOURCE' || (
+  /^[a-p]{32}$/.test(value.matcher) &&
+  /^[a-zA-Z0-9/_-]+\.(svg|png|webp)$/i.test(value.resourcePath || '') &&
+  !value.resourcePath.startsWith('/') &&
+  !value.resourcePath.split('/').includes('..')
+), {
+  message: 'Use a Chrome/Edge extension ID and a relative SVG, PNG, or WebP resource path', path: ['resourcePath'],
 });
 
 const updateFingerprintSchema = z.object({
   name: z.string().min(1).max(100).trim().optional(),
   tool: z.string().min(1).max(100).trim().optional(),
-  matcherType: z.enum(['SELECTOR', 'IFRAME_SRC', 'GLOBAL_VAR']).optional(),
+  matcherType: z.enum(['SELECTOR', 'IFRAME_SRC', 'GLOBAL_VAR', 'EXTENSION_RESOURCE']).optional(),
   matcher: z.string().min(1).trim().optional(),
+  resourcePath: z.string().max(200).optional(),
   weight: z.number().int().min(1).optional(),
   severity: z.enum(['LOW', 'MED', 'HIGH']).optional(),
   description: z.string().max(500).optional(),
   isActive: z.boolean().optional(),
   allowed: z.boolean().optional(),
+}).refine((value) => value.matcherType !== 'EXTENSION_RESOURCE' || (
+  /^[a-p]{32}$/.test(value.matcher || '') &&
+  /^[a-zA-Z0-9/_-]+\.(svg|png|webp)$/i.test(value.resourcePath || '') &&
+  !value.resourcePath.startsWith('/') &&
+  !value.resourcePath.split('/').includes('..')
+), {
+  message: 'Extension resource updates require a valid extension ID and relative image path', path: ['resourcePath'],
 });
 
 const updateThresholdSchema = z.object({
