@@ -19,12 +19,15 @@ const patchFlagSchema = z.object({
 });
 
 const signalItemSchema = z.object({
+  id: z.string().min(1).max(100).optional(),
   code: z.string().min(1),
   severity: z.enum(['LOW', 'MED', 'HIGH']).optional(),
   t: z.number().optional(),
   key: z.string().max(200).optional(),
-  meta: z.record(z.any()).optional(),
-});
+  meta: z.record(z.union([z.string().max(200), z.number().finite(), z.boolean()]))
+    .refine((meta) => Object.keys(meta).length <= 10, 'Signal metadata has too many fields')
+    .optional(),
+}).strict();
 
 const signalsBatchSchema = z.object({
   signals: z.array(signalItemSchema).min(1).max(50),

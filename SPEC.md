@@ -8,7 +8,7 @@ Changing a contract (field, event, endpoint, signal code)? Tell the team first.
 - **Server:** Node 18+, Express 4, Mongoose 8, Socket.IO 4 + `@socket.io/redis-adapter`, ioredis (Upstash), zod, bcryptjs, jsonwebtoken, helmet, cors, express-rate-limit, express-mongo-sanitize. CommonJS (`require`).
 - **Client:** React 18 + Vite, Tailwind v4, react-router-dom 6, axios, socket.io-client, zustand, react-hot-toast, react-virtuoso, recharts. Plain JavaScript/JSX, no TypeScript.
 - **MongoDB:** users, exams, sessions, flags, fingerprints, thresholds.
-- **Redis:** live counters, sliding signal windows, debounce keys, Socket.IO adapter. Raw signals never go to MongoDB.
+- **Redis:** live counters, sliding signal windows, debounce keys, Socket.IO adapter. Raw signals are not stored as a continuous stream; signals contributing to a flag are retained in flag evidence.
 - `redis` (server/src/config/redis.js) is `null` when `REDIS_URL` is empty. Every Redis consumer needs an in-memory fallback.
 
 ## 2. Team and ownership
@@ -149,6 +149,7 @@ Proctor client rules: keep **connection** (ONLINE/OFFLINE/ENDED) and **maxSeveri
 | `DOM_NODE_DELTA` | LOW | 2 | #6 | top-level children of body/html grow vs the baseline taken at start |
 | `WINDOW_BLUR` | LOW | 1 | #5 | window blur |
 | `TAB_HIDDEN` | LOW | 2 | #5 | visibilitychange to hidden |
+| `BROWSER_TAB_SWITCH` | LOW | 1 | Optional Manifest V3 companion | active HTTP(S) tab changes; sanitized origin/path and title only, no page text |
 | `LARGE_PASTE` | LOW | 2 | #8 | paste longer than 100 chars (meta: length only) |
 | `DEVTOOLS_OPEN` | LOW | 2 | #8 | outer/inner window size gap > 160px heuristic |
 
@@ -176,7 +177,7 @@ stop(); // disconnects observers, clears timers, flushes remaining signals
 
 **Exam page flow (owner Tanisha)**, `pages/candidate/ExamPage.jsx`:
 1. `GET /exams/:examId` -> show title, questions, timer.
-2. Show the monitoring notice (what is collected: overlay/extension metadata and focus events; what is not: keystrokes, screen, camera). Button "Start exam".
+2. Show clear candidate exam rules: work independently, stay on the exam page/fullscreen, use only explicitly permitted resources, and do not use unauthorized websites, AI/helper tools, extensions, people, or devices. Explain that focus/integrity signals (and optional companion active-tab URL/title metadata) go to the assigned proctor for review and are not a verdict on their own. Button "I understand — Start exam".
 3. `POST /exams/:examId/sessions` with `{ userAgent: navigator.userAgent, screen: { w: innerWidth, h: innerHeight } }` -> `sessionId`.
 4. `GET /fingerprints/active`.
 5. `socket = createSocket()`; on `connect` emit `session:join { sessionId }`.
@@ -184,6 +185,9 @@ stop(); // disconnects observers, clears timers, flushes remaining signals
 7. Keep a persistent "Integrity monitoring active" badge visible.
 8. Submit -> `POST /sessions/:id/end { answers }` -> `stop()`, `socket.disconnect()`, success screen.
 9. On unmount: `stop()` + `socket.disconnect()`.
+
+The optional browser companion requires the browser `tabs` permission and must be installed
+by the candidate. Without it, only ordinary exam-tab focus/visibility changes are available.
 
 **Proctor live store (owner Tanya)**, `store/live.js` (zustand): `sessions` keyed by `_id`, `order` (array of ids), `feed` (latest 100 flags), `summary`. Tiles subscribe to their own entry (`useLive((s) => s.sessions[id])`) so one event re-renders one tile, never the whole grid.
 

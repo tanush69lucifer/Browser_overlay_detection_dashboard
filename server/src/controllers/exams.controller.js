@@ -1,6 +1,7 @@
 const Exam = require('../models/Exam');
 const User = require('../models/User');
 const Session = require('../models/Session');
+const Fingerprint = require('../models/Fingerprint');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const escapeRegex = require('../utils/escapeRegex');
@@ -19,10 +20,24 @@ async function assertRoles(ids, roles, label) {
   }
 }
 
+async function assertFingerprints(ids) {
+  if (!ids.length) return;
+  const count = await Fingerprint.countDocuments({ _id: { $in: ids } });
+  if (count !== ids.length) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Some selected fingerprints are unavailable');
+  }
+}
+
 const createExam = asyncHandler(async (req, res) => {
-  const body = { ...req.body, candidateIds: unique(req.body.candidateIds), proctorIds: unique(req.body.proctorIds) };
+  const body = {
+    ...req.body,
+    candidateIds: unique(req.body.candidateIds),
+    proctorIds: unique(req.body.proctorIds),
+    fingerprintIds: unique(req.body.fingerprintIds),
+  };
   await assertRoles(body.candidateIds, ['CANDIDATE'], 'candidates');
   await assertRoles(body.proctorIds, ['PROCTOR', 'ADMIN'], 'proctors');
+  await assertFingerprints(body.fingerprintIds);
   const exam = await Exam.create({ ...body, createdBy: req.user.id });
   ok(res, { exam }, { status: 201, message: 'Exam created' });
 });
@@ -40,8 +55,15 @@ const listExams = asyncHandler(async (req, res) => {
   const projection =
     role === 'CANDIDATE' ? 'title description startAt endAt durationMin' : '-questions';
 
+  const examsQuery = Exam.find(filter)
+    .select(projection)
+    .sort(sort)
+    .skip((page - 1) * limit)
+    .limit(limit);
+  if (role === 'ADMIN') examsQuery.populate('proctorIds', 'name email');
+
   const [docs, total] = await Promise.all([
-    Exam.find(filter).select(projection).sort(sort).skip((page - 1) * limit).limit(limit).lean(),
+    examsQuery.lean(),
     Exam.countDocuments(filter),
   ]);
 
@@ -54,10 +76,19 @@ const listExams = asyncHandler(async (req, res) => {
     const statusByExam = new Map(sessions.map((s) => [String(s.examId), s.status]));
     items = docs.map((d) => ({ ...d, mySessionStatus: statusByExam.get(String(d._id)) || null }));
   } else {
-    items = docs.map(({ candidateIds, proctorIds, ...rest }) => ({
+    items = docs.map(({ candidateIds = [], proctorIds = [], ...rest }) => ({
       ...rest,
       candidateCount: candidateIds.length,
       proctorCount: proctorIds.length,
+      ...(role === 'ADMIN'
+        ? {
+            proctors: proctorIds.filter(Boolean).map(({ _id, name, email: proctorEmail }) => ({
+              id: String(_id),
+              name,
+              email: proctorEmail,
+            })),
+          }
+        : {}),
     }));
   }
 
@@ -69,13 +100,16 @@ const getExam = asyncHandler(async (req, res) => {
 
   if (role === 'CANDIDATE') {
     const exam = await Exam.findById(req.params.id)
-      .select('title description startAt endAt durationMin questions candidateIds')
+      .select('title description startAt endAt durationMin questions candidateIds fingerprintIds')
       .lean();
     if (!exam || !exam.candidateIds.some((id) => String(id) === userId)) {
       throw new ApiError(404, 'NOT_FOUND', 'Exam not found');
     }
-    const { candidateIds, ...safe } = exam;
-    return ok(res, { exam: safe });
+    const { candidateIds, fingerprintIds, ...safe } = exam;
+    const fingerprintFilter = { isActive: true };
+    if (fingerprintIds?.length) fingerprintFilter._id = { $in: fingerprintIds };
+    const fingerprints = await Fingerprint.find(fingerprintFilter).sort({ tool: 1 }).lean();
+    return ok(res, { exam: { ...safe, fingerprints } });
   }
 
   const exam = await loadExamForStaff(req.params.id, req.user);
@@ -107,6 +141,10 @@ const updateExam = asyncHandler(async (req, res) => {
   if (updates.proctorIds) {
     updates.proctorIds = unique(updates.proctorIds);
     await assertRoles(updates.proctorIds, ['PROCTOR', 'ADMIN'], 'proctors');
+  }
+  if (updates.fingerprintIds) {
+    updates.fingerprintIds = unique(updates.fingerprintIds);
+    await assertFingerprints(updates.fingerprintIds);
   }
 
   exam.set(updates);

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { createExam, getUsers, updateExam } from '../../api/admin';
-import { getExams } from '../../api/exams';
+import { createExam, getFingerprints, getUsers, updateExam } from '../../api/admin';
+import { getExam, getExams } from '../../api/exams';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
@@ -20,7 +21,15 @@ const EMPTY_FORM = {
   sensitivity: 'MEDIUM',
   candidateIds: [],
   proctorIds: [],
+  fingerprintIds: [],
   questions: [{ text: '', options: [''] }],
+};
+
+const toLocalDateTimeInput = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 };
 
 const normalizePayload = (draft) => {
@@ -35,15 +44,25 @@ const normalizePayload = (draft) => {
     ...draft,
     title: draft.title.trim(),
     description: draft.description.trim(),
+    startAt: draft.startAt ? new Date(draft.startAt).toISOString() : '',
+    endAt: draft.endAt ? new Date(draft.endAt).toISOString() : '',
     durationMin: Number(draft.durationMin || 60),
     questions,
   };
 };
 
+const mergeUsers = (current, incoming) => {
+  const usersById = new Map(current.map((user) => [String(user._id || user.id), user]));
+  for (const user of incoming) usersById.set(String(user._id || user.id), user);
+  return [...usersById.values()];
+};
+
 export default function AdminExams() {
+  const navigate = useNavigate();
   const [exams, setExams] = useState([]);
   const [candidates, setCandidates] = useState([]);
   const [proctors, setProctors] = useState([]);
+  const [fingerprints, setFingerprints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -52,22 +71,25 @@ export default function AdminExams() {
   const [submitting, setSubmitting] = useState(false);
   const [candidateSearch, setCandidateSearch] = useState('');
   const [proctorSearch, setProctorSearch] = useState('');
+  const [fingerprintSearch, setFingerprintSearch] = useState('');
 
   const loadData = async () => {
     try {
       setLoading(true);
       setFetchError('');
 
-      const [examResult, candidateResult, proctorResult] = await Promise.all([
+      const [examResult, candidateResult, proctorResult, fingerprintResult] = await Promise.all([
         getExams({ page: 1, limit: 100 }),
         getUsers({ role: 'CANDIDATE', page: 1, limit: 100 }),
         getUsers({ role: 'PROCTOR', page: 1, limit: 100 }),
+        getFingerprints({ page: 1, limit: 500 }),
       ]);
 
       const examList = Array.isArray(examResult?.items) ? examResult.items : Array.isArray(examResult) ? examResult : [];
       setExams(examList);
       setCandidates(Array.isArray(candidateResult?.items) ? candidateResult.items : Array.isArray(candidateResult) ? candidateResult : []);
       setProctors(Array.isArray(proctorResult?.items) ? proctorResult.items : Array.isArray(proctorResult) ? proctorResult : []);
+      setFingerprints(Array.isArray(fingerprintResult?.items) ? fingerprintResult.items : []);
     } catch (err) {
       setFetchError(err?.message || 'Unable to load the exam dashboard');
     } finally {
@@ -78,6 +100,29 @@ export default function AdminExams() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const [candidateResult, proctorResult] = await Promise.all([
+          getUsers({ role: 'CANDIDATE', page: 1, limit: 100, search: candidateSearch }),
+          getUsers({ role: 'PROCTOR', page: 1, limit: 100, search: proctorSearch }),
+        ]);
+        if (cancelled) return;
+        const candidateItems = Array.isArray(candidateResult?.items) ? candidateResult.items : [];
+        const proctorItems = Array.isArray(proctorResult?.items) ? proctorResult.items : [];
+        setCandidates((current) => mergeUsers(current, candidateItems));
+        setProctors((current) => mergeUsers(current, proctorItems));
+      } catch (err) {
+        if (!cancelled) toast.error(err?.message || 'Unable to search assigned users');
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [candidateSearch, proctorSearch]);
 
   const filteredCandidates = useMemo(
     () =>
@@ -94,6 +139,19 @@ export default function AdminExams() {
       ),
     [proctorSearch, proctors]
   );
+  const filteredFingerprints = useMemo(
+    () =>
+      fingerprints.filter((fingerprint) =>
+        !fingerprintSearch || `${fingerprint.name} ${fingerprint.tool}`.toLowerCase().includes(fingerprintSearch.toLowerCase())
+      ),
+    [fingerprintSearch, fingerprints]
+  );
+  const examWindowMs = draft.startAt && draft.endAt
+    ? new Date(draft.endAt).getTime() - new Date(draft.startAt).getTime()
+    : NaN;
+  const examWindowMinutes = Number.isFinite(examWindowMs) && examWindowMs > 0
+    ? Math.floor(examWindowMs / 60_000)
+    : null;
 
   const openCreateModal = () => {
     setDraft(EMPTY_FORM);
@@ -101,23 +159,32 @@ export default function AdminExams() {
     setModalOpen(true);
   };
 
-  const openEditModal = (exam) => {
-    setEditingId(exam._id || exam.id);
+  const openEditModal = async (exam) => {
+    try {
+      const payload = await getExam(exam._id || exam.id);
+      const details = payload?.exam || payload;
+      setEditingId(details._id || details.id);
+      setCandidates((current) => mergeUsers(current, details.candidates || []));
+      setProctors((current) => mergeUsers(current, details.proctors || []));
     setDraft({
-      title: exam.title || '',
-      description: exam.description || '',
-      startAt: exam.startAt ? new Date(exam.startAt).toISOString().slice(0, 16) : '',
-      endAt: exam.endAt ? new Date(exam.endAt).toISOString().slice(0, 16) : '',
-      durationMin: exam.durationMin || 60,
-      sensitivity: exam.sensitivity || 'MEDIUM',
-      candidateIds: (exam.candidateIds || []).map((id) => String(id)),
-      proctorIds: (exam.proctorIds || []).map((id) => String(id)),
-      questions: (exam.questions || []).map((question) => ({
+      title: details.title || '',
+      description: details.description || '',
+      startAt: toLocalDateTimeInput(details.startAt),
+      endAt: toLocalDateTimeInput(details.endAt),
+      durationMin: details.durationMin || 60,
+      sensitivity: details.sensitivity || 'MEDIUM',
+      candidateIds: (details.candidateIds || details.candidates?.map((user) => user._id) || []).map((id) => String(id)),
+      proctorIds: (details.proctorIds || details.proctors?.map((user) => user._id) || []).map((id) => String(id)),
+      fingerprintIds: (details.fingerprintIds || []).map((id) => String(id)),
+      questions: (details.questions || []).map((question) => ({
         text: question.text || '',
         options: Array.isArray(question.options) ? question.options : [],
       })),
     });
-    setModalOpen(true);
+      setModalOpen(true);
+    } catch (err) {
+      toast.error(err?.message || 'Unable to load exam for editing');
+    }
   };
 
   const toggleSelection = (field, userId) => {
@@ -167,6 +234,10 @@ export default function AdminExams() {
     }
     if (new Date(payload.endAt) <= new Date(payload.startAt)) {
       toast.error('End time must be after the start time');
+      return;
+    }
+    if (!Number.isInteger(payload.durationMin) || payload.durationMin < 1 || payload.durationMin > 600) {
+      toast.error('Exam duration must be from 1 to 600 minutes');
       return;
     }
 
@@ -228,6 +299,45 @@ export default function AdminExams() {
     </div>
   );
 
+  const renderFingerprintPicker = () => (
+    <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-950/40 p-3">
+      <div>
+        <h4 className="font-medium text-white">Fingerprint set</h4>
+        <p className="mt-1 text-xs text-slate-400">
+          {draft.fingerprintIds.length ? `${draft.fingerprintIds.length} selected` : 'All active fingerprints'}
+        </p>
+      </div>
+      <Input
+        value={fingerprintSearch}
+        onChange={(event) => setFingerprintSearch(event.target.value)}
+        placeholder="Search fingerprints"
+      />
+      <div className="flex max-h-40 flex-wrap gap-2 overflow-auto">
+        {filteredFingerprints.length ? filteredFingerprints.map((fingerprint) => {
+          const id = String(fingerprint._id || fingerprint.id);
+          const selected = draft.fingerprintIds.includes(id);
+          return (
+            <button
+              type="button"
+              key={id}
+              aria-pressed={selected}
+              disabled={!fingerprint.isActive && !selected}
+              onClick={() => toggleSelection('fingerprintIds', id)}
+              className={[
+                'rounded-xl border px-2.5 py-2 text-left text-xs transition',
+                selected ? 'border-primary bg-primary/10 text-primary' : 'border-slate-600 bg-slate-900/60 text-slate-200',
+                !fingerprint.isActive && !selected ? 'cursor-not-allowed opacity-50' : '',
+              ].join(' ')}
+            >
+              {fingerprint.name} · {fingerprint.isActive ? fingerprint.severity : 'Inactive'}
+              {fingerprint.allowed ? ' · Allowed' : ''}
+            </button>
+          );
+        }) : <span className="text-xs text-slate-400">No active fingerprints match.</span>}
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -283,9 +393,30 @@ export default function AdminExams() {
                         {exam.sensitivity || 'MEDIUM'}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3">{(exam.candidateIds || []).length}</td>
-                    <td className="px-4 py-3">{(exam.proctorIds || []).length}</td>
+                    <td className="px-4 py-3">{exam.candidateCount ?? (exam.candidateIds || []).length}</td>
                     <td className="px-4 py-3">
+                      {exam.proctors?.length ? (
+                        <div className="space-y-1">
+                          {exam.proctors.map((proctor) => (
+                            <div key={proctor.id || proctor.email}>
+                              <div className="font-medium text-slate-100">{proctor.name}</div>
+                              <div className="text-xs text-slate-400">{proctor.email}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">
+                          {exam.proctorCount ?? (exam.proctorIds || []).length} assigned
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Button
+                        variant="ghost"
+                        onClick={() => navigate(`/admin/exams/${exam._id || exam.id}/report`)}
+                      >
+                        Report
+                      </Button>
                       <Button variant="ghost" onClick={() => openEditModal(exam)}>
                         Edit
                       </Button>
@@ -366,11 +497,18 @@ export default function AdminExams() {
               onChange={(event) => setDraft((current) => ({ ...current, durationMin: Number(event.target.value) || 60 }))}
             />
           </div>
+          <p className="text-sm text-slate-400">
+            {examWindowMinutes === null
+              ? 'Availability window is when candidates may start. Duration is each candidate’s timer.'
+              : `Availability window: ${Math.floor(examWindowMinutes / 60)}h ${examWindowMinutes % 60}m. Candidate timer: ${draft.durationMin}m from starting; it stops at the exam end time if that comes first.`}
+          </p>
 
           <div className="grid gap-4 md:grid-cols-2">
             {renderAssignmentPicker('Candidates', filteredCandidates, draft.candidateIds, candidateSearch, setCandidateSearch, 'candidateIds')}
             {renderAssignmentPicker('Proctors', filteredProctors, draft.proctorIds, proctorSearch, setProctorSearch, 'proctorIds')}
           </div>
+
+          {renderFingerprintPicker()}
 
           <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-950/40 p-3">
             <div className="flex items-center justify-between">
@@ -381,7 +519,7 @@ export default function AdminExams() {
             </div>
 
             {draft.questions.map((question, questionIndex) => (
-              <div key={`${questionIndex}-${question.text}`} className="rounded-xl border border-slate-700 bg-slate-900/50 p-3">
+              <div key={question._id || questionIndex} className="rounded-xl border border-slate-700 bg-slate-900/50 p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="text-sm font-medium text-slate-200">Question {questionIndex + 1}</span>
                   {draft.questions.length > 1 ? (

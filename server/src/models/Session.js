@@ -25,6 +25,7 @@ const sessionSchema = new mongoose.Schema(
 // One attempt per candidate per exam; reopening the tab resumes the same session.
 sessionSchema.index({ examId: 1, candidateId: 1 }, { unique: true });
 sessionSchema.index({ examId: 1, status: 1 });
+sessionSchema.index({ status: 1, lastHeartbeat: 1 });
 
 module.exports = mongoose.model('Session', sessionSchema);
 module.exports.SESSION_STATUS = SESSION_STATUS;

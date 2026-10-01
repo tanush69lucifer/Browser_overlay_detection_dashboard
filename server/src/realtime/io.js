@@ -7,6 +7,7 @@ const Session = require('../models/Session');
 const Exam = require('../models/Exam');
 const counters = require('../redis/counters');
 const { processBatch } = require('../scoring/score');
+const toProctorSignal = require('../utils/proctorSignal');
 
 const MAX_SIGNALS_PER_BATCH = 50;
 const SUMMARY_INTERVAL_MS = 5000;
@@ -57,6 +58,11 @@ function initSocket(httpServer) {
         if (user.role !== 'CANDIDATE') return reply({ ok: false, error: 'FORBIDDEN' });
         const session = await Session.findOne({ _id: payload.sessionId, candidateId: user.id }).lean();
         if (!session || session.status === 'ENDED') return reply({ ok: false, error: 'SESSION_NOT_ACTIVE' });
+        const exam = await Exam.findById(session.examId).select('startAt endAt').lean();
+        const now = Date.now();
+        if (!exam || now < new Date(exam.startAt).getTime() || now > new Date(exam.endAt).getTime()) {
+          return reply({ ok: false, error: 'EXAM_WINDOW_CLOSED' });
+        }
 
         const sessionId = String(session._id);
         const examId = String(session.examId);
@@ -64,10 +70,16 @@ function initSocket(httpServer) {
         socket.join(`session:${sessionId}`);
 
         await counters.setOnline(examId, sessionId);
-        if (session.status !== 'ONLINE') {
-          await Session.updateOne({ _id: sessionId }, { status: 'ONLINE', lastHeartbeat: new Date() });
-        }
-        emitToExam(examId, 'session:status', { sessionId, status: 'ONLINE', focused: true });
+        await Session.updateOne(
+          { _id: sessionId, status: { $ne: 'ENDED' } },
+          { $set: { status: 'ONLINE', lastHeartbeat: new Date() } }
+        );
+        emitToExam(examId, 'session:status', {
+          sessionId,
+          status: 'ONLINE',
+          focused: true,
+          candidate: { id: user.id, name: user.name || 'Candidate' },
+        });
         reply({ ok: true });
       } catch (err) {
         console.error('session:join failed:', err.message);
@@ -84,12 +96,16 @@ function initSocket(httpServer) {
 
       try {
         const signals = payload.signals.slice(0, MAX_SIGNALS_PER_BATCH);
-        const { flags } = await processBatch({
+        const { flags, signals: acceptedSignals } = await processBatch({
           sessionId,
           examId,
           candidate: { id: user.id, name: user.name },
           signals,
         });
+        for (const signal of acceptedSignals) {
+          const event = toProctorSignal(signal, sessionId, user);
+          if (event) emitToExam(examId, 'signal:new', event);
+        }
         for (const flag of flags) emitToExam(examId, 'flag:new', flag);
         if (flags.length) {
           const rank = { LOW: 1, MED: 2, HIGH: 3 };
@@ -109,6 +125,12 @@ function initSocket(httpServer) {
       if (!sessionId) return;
       const focused = payload.focused !== false;
       try {
+        const heartbeatAt = new Date();
+        const update = await Session.updateOne(
+          { _id: sessionId, status: { $ne: 'ENDED' } },
+          { $set: { status: 'ONLINE', lastHeartbeat: heartbeatAt } }
+        );
+        if (!update.matchedCount) return;
         await counters.heartbeat(examId, sessionId, focused);
         if (focused !== socket.data.focused) {
           socket.data.focused = focused;
@@ -123,7 +145,7 @@ function initSocket(httpServer) {
     socket.on('proctor:join', async (payload = {}, ack) => {
       const reply = asAck(ack);
       try {
-        if (!['PROCTOR', 'ADMIN'].includes(user.role)) return reply({ ok: false, error: 'FORBIDDEN' });
+        if (user.role !== 'PROCTOR') return reply({ ok: false, error: 'FORBIDDEN' });
         const exam = await Exam.findById(payload.examId).select('proctorIds').lean();
         if (!exam) return reply({ ok: false, error: 'NOT_FOUND' });
         if (user.role === 'PROCTOR' && !exam.proctorIds.some((id) => String(id) === user.id)) {
@@ -150,7 +172,7 @@ function initSocket(httpServer) {
         await counters.setOffline(examId, sessionId);
         const res = await Session.updateOne(
           { _id: sessionId, status: { $ne: 'ENDED' } },
-          { status: 'OFFLINE', lastHeartbeat: new Date() }
+          { status: 'OFFLINE' }
         );
         if (res.modifiedCount) emitToExam(examId, 'session:status', { sessionId, status: 'OFFLINE' });
       } catch (err) {
@@ -175,6 +197,30 @@ function initSocket(httpServer) {
       }
     }
   }, SUMMARY_INTERVAL_MS).unref();
+
+  const HEARTBEAT_TIMEOUT_MS = 35000;
+  setInterval(async () => {
+    const cutoff = new Date(Date.now() - HEARTBEAT_TIMEOUT_MS);
+    try {
+      const stale = await Session.find({ status: 'ONLINE', lastHeartbeat: { $lt: cutoff } })
+        .select('_id examId')
+        .lean();
+      if (!stale.length) return;
+
+      await Session.updateMany(
+        { _id: { $in: stale.map((session) => session._id) }, status: 'ONLINE', lastHeartbeat: { $lt: cutoff } },
+        { $set: { status: 'OFFLINE' } }
+      );
+      for (const session of stale) {
+        const sessionId = String(session._id);
+        const examId = String(session.examId);
+        await counters.setOffline(examId, sessionId);
+        emitToExam(examId, 'session:status', { sessionId, status: 'OFFLINE' });
+      }
+    } catch (err) {
+      console.error('heartbeat timeout sweep failed:', err.message);
+    }
+  }, 10000).unref();
 
   return io;
 }

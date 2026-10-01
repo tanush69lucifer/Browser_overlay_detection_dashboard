@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { endSession, getActiveFingerprints, getExam, startSession } from '../../api/exams';
+import { endSession, getExam, startSession } from '../../api/exams';
 import { createSocket } from '../../realtime/socket';
 import { startDetector } from '../../detector';
 import Badge from '../../components/ui/Badge';
@@ -33,8 +33,10 @@ export default function ExamPage() {
   const [error, setError] = useState('');
   const [monitoringStarted, setMonitoringStarted] = useState(false);
   const [sessionId, setSessionId] = useState('');
+  const [sessionStartedAt, setSessionStartedAt] = useState(null);
   const [answers, setAnswers] = useState({});
   const [socketConnected, setSocketConnected] = useState(false);
+  const [browserExtensionConnected, setBrowserExtensionConnected] = useState(false);
   const [fingerprints, setFingerprints] = useState([]);
   const [remainingMs, setRemainingMs] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -42,12 +44,19 @@ export default function ExamPage() {
 
   const cleanupSession = () => {
     if (stopDetectorRef.current) {
-      stopDetectorRef.current();
+      void stopDetectorRef.current().catch((err) => {
+        console.warn('[Exam] Unable to flush queued integrity signals during cleanup:', err);
+      });
       stopDetectorRef.current = null;
     }
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;
+    }
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch((err) => {
+        console.warn('[Exam] Unable to exit fullscreen:', err.message);
+      });
     }
   };
 
@@ -56,9 +65,11 @@ export default function ExamPage() {
       setLoading(true);
       setError('');
       const data = await getExam(examId);
-      setExam(data);
-      const totalMs = data?.durationMin ? Number(data.durationMin) * 60 * 1000 : 0;
-      const endAt = data?.endAt ? new Date(data.endAt).getTime() : Date.now() + totalMs;
+      const examData = data?.exam || data;
+      setExam(examData);
+      setFingerprints(Array.isArray(examData?.fingerprints) ? examData.fingerprints : []);
+      const totalMs = examData?.durationMin ? Number(examData.durationMin) * 60 * 1000 : 0;
+      const endAt = examData?.endAt ? new Date(examData.endAt).getTime() : Date.now() + totalMs;
       setRemainingMs(endAt - Date.now());
     } catch (err) {
       setError(err?.message || 'Unable to load exam');
@@ -73,18 +84,21 @@ export default function ExamPage() {
   }, [examId]);
 
   useEffect(() => {
-    if (!exam || !monitoringStarted) return undefined;
+    if (!exam || !monitoringStarted || !sessionStartedAt) return undefined;
 
     const tick = () => {
-      const durationMs = exam?.durationMin ? Number(exam.durationMin) * 60 * 1000 : 0;
-      const deadline = exam?.endAt ? new Date(exam.endAt).getTime() : Date.now() + durationMs;
+      const durationMs = Number(exam.durationMin || 60) * 60 * 1000;
+      const startedAt = new Date(sessionStartedAt).getTime();
+      const durationDeadline = startedAt + durationMs;
+      const examDeadline = exam.endAt ? new Date(exam.endAt).getTime() : Number.POSITIVE_INFINITY;
+      const deadline = Math.min(durationDeadline, examDeadline);
       setRemainingMs(deadline - Date.now());
     };
 
     tick();
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
-  }, [exam, monitoringStarted]);
+  }, [exam, monitoringStarted, sessionStartedAt]);
 
   useEffect(() => {
     if (!monitoringStarted || remainingMs > 0 || submitted || !sessionId) return;
@@ -96,6 +110,16 @@ export default function ExamPage() {
 
     try {
       setSubmitting(true);
+      if (stopDetectorRef.current) {
+        const stopDetector = stopDetectorRef.current;
+        const signalsDelivered = await stopDetector.flush();
+        if (!signalsDelivered) {
+          toast.error('Monitoring events are still queued. Check your connection and submit again.');
+          return;
+        }
+        stopDetectorRef.current = null;
+        await stopDetector();
+      }
       await endSession(sessionId, answers);
       setSubmitted(true);
       cleanupSession();
@@ -108,6 +132,14 @@ export default function ExamPage() {
   };
 
   const startMonitoring = async () => {
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      try {
+        await document.documentElement.requestFullscreen();
+      } catch {
+        toast.error('Fullscreen could not be enabled. You can enter fullscreen manually.');
+      }
+    }
+
     try {
       const session = await startSession(examId, {
         userAgent: navigator.userAgent,
@@ -117,26 +149,42 @@ export default function ExamPage() {
       const nextSessionId = session?.sessionId || session?._id || session?.id;
       if (!nextSessionId) throw new Error('No active exam session was returned');
 
+      const nextStartedAt = session?.startedAt || new Date().toISOString();
+      const startedAtMs = new Date(nextStartedAt).getTime();
+      const durationMs = Number(exam.durationMin || 60) * 60 * 1000;
+      const durationDeadline = startedAtMs + durationMs;
+      const examDeadline = exam.endAt ? new Date(exam.endAt).getTime() : Number.POSITIVE_INFINITY;
+
       setSessionId(nextSessionId);
+      setSessionStartedAt(nextStartedAt);
+      setRemainingMs(Math.min(durationDeadline, examDeadline) - Date.now());
       setMonitoringStarted(true);
 
-      const activeFingerprints = await getActiveFingerprints().catch(() => []);
-      setFingerprints(activeFingerprints || []);
+      const activeFingerprints = fingerprints;
 
       const socket = createSocket();
       socketRef.current = socket;
 
       socket.on('connect', () => {
-        setSocketConnected(true);
+        setSocketConnected(false);
         socket.emit('session:join', { sessionId: nextSessionId }, (ack) => {
-          if (!ack?.ok) toast.error(ack?.error || 'Monitoring connection was not confirmed');
+          if (!ack?.ok) {
+            setSocketConnected(false);
+            toast.error(ack?.error || 'Monitoring connection was not confirmed');
+            return;
+          }
+          setSocketConnected(true);
         });
       });
-
       socket.on('disconnect', () => setSocketConnected(false));
       socket.on('connect_error', () => setSocketConnected(false));
 
-      const stop = startDetector({ socket, sessionId: nextSessionId, fingerprints: activeFingerprints || [] });
+      const stop = startDetector({
+        socket,
+        sessionId: nextSessionId,
+        fingerprints: activeFingerprints,
+        onExtensionStatus: setBrowserExtensionConnected,
+      });
       stopDetectorRef.current = stop;
     } catch (err) {
       toast.error(err?.message || 'Unable to start the monitored exam');
@@ -189,31 +237,36 @@ export default function ExamPage() {
       <Modal
         open={!monitoringStarted && !submitted}
         onClose={() => navigate('/candidate')}
-        title="Monitoring notice"
-        description="Before the timer starts, here is what the platform captures and what it does not."
+        title="Before you begin: exam rules"
+        description="Please read these instructions before starting. Your exam timer begins when monitoring starts."
         size="md"
       >
         <div className="space-y-5">
           <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-            <h4 className="font-semibold text-emerald-200">What is collected</h4>
+            <h4 className="font-semibold text-emerald-200">During the exam</h4>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-200">
-              <li>Overlay and extension metadata</li>
-              <li>Focus and visibility events</li>
-              <li>Browser integrity signals during active monitoring</li>
+              <li>Answer the questions independently using your own knowledge.</li>
+              <li>Stay on this exam page and keep the exam in fullscreen.</li>
+              <li>Use only books, tools, and other materials that the exam instructions explicitly permit.</li>
+              <li>If a technical issue occurs or you need to leave the exam page, contact your proctor and explain what happened.</li>
             </ul>
           </div>
 
           <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
-            <h4 className="font-semibold text-red-200">What is not collected</h4>
+            <h4 className="font-semibold text-red-200">Not permitted</h4>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-200">
-              <li>No keystrokes or clipboard text</li>
-              <li>No live camera or screen capture</li>
-              <li>No personal files or browser history content</li>
+              <li>Do not open other websites, search engines, messaging apps, or AI answer tools during the exam.</li>
+              <li>Do not use unauthorized browser extensions, overlays, helper tools, another person, or another device to get answers.</li>
+              <li>Do not copy questions or answers elsewhere, or paste in answers from another source.</li>
             </ul>
           </div>
 
+          <p className="text-sm leading-6 text-slate-300">
+            Monitoring can record exam-page focus changes and integrity signals. If the optional browser companion is installed, it can also report the active tab’s title and sanitized URL—not page text. Signals are sent to your assigned proctor for review; a signal by itself is not a decision that you broke the rules.
+          </p>
+
           <div className="flex justify-end">
-            <Button onClick={startMonitoring}>Start exam</Button>
+            <Button onClick={startMonitoring}>I understand — Start exam</Button>
           </div>
         </div>
       </Modal>
@@ -240,9 +293,21 @@ export default function ExamPage() {
             <div className="flex items-center gap-3">
               <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm">
                 <span className={['h-2.5 w-2.5 rounded-full', socketConnected ? 'bg-ok' : 'bg-danger'].join(' ')} />
-                <span className={socketConnected ? 'text-ok' : 'text-danger'}>
-                  {socketConnected ? 'Integrity monitoring active' : 'Reconnecting'}
+                <span className={socketConnected ? 'text-ok' : 'text-danger'} role="status">
+                  {socketConnected ? 'Integrity monitoring active' : 'Live link reconnecting · events queued'}
                 </span>
+              </div>
+              <div
+                className={[
+                  'inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm',
+                  browserExtensionConnected
+                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+                    : 'border-amber-500/40 bg-amber-500/10 text-amber-200',
+                ].join(' ')}
+                role="status"
+                title="The companion reports active-tab URL/title only; it does not read page text."
+              >
+                {browserExtensionConnected ? 'Browser companion connected' : 'Tab URL tracking unavailable'}
               </div>
               <div className="rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-lg font-semibold text-white num">
                 {timerLabel}
