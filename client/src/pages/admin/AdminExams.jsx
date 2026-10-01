@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { createExam, getFingerprints, getUsers, updateExam } from '../../api/admin';
+import { createExam, createProctor, getFingerprints, getUsers, updateExam } from '../../api/admin';
 import { getExam, getExams } from '../../api/exams';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -66,9 +66,12 @@ export default function AdminExams() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [proctorModalOpen, setProctorModalOpen] = useState(false);
+  const [proctorDraft, setProctorDraft] = useState({ name: '', email: '', password: '' });
   const [draft, setDraft] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [creatingProctor, setCreatingProctor] = useState(false);
   const [candidateSearch, setCandidateSearch] = useState('');
   const [proctorSearch, setProctorSearch] = useState('');
   const [fingerprintSearch, setFingerprintSearch] = useState('');
@@ -261,6 +264,30 @@ export default function AdminExams() {
     }
   };
 
+  const saveProctor = async () => {
+    const name = proctorDraft.name.trim();
+    const email = proctorDraft.email.trim();
+    if (name.length < 2 || !email || proctorDraft.password.length < 8) {
+      toast.error('Enter a name, valid email, and password of at least 8 characters');
+      return;
+    }
+
+    try {
+      setCreatingProctor(true);
+      const result = await createProctor({ name, email, password: proctorDraft.password });
+      const createdUser = result?.user;
+      if (!createdUser?._id) throw new Error('Proctor account was created, but the user details were not returned');
+      setProctors((current) => mergeUsers(current, [createdUser]));
+      setProctorDraft({ name: '', email: '', password: '' });
+      setProctorModalOpen(false);
+      toast.success('Proctor account created and added to the assignment list');
+    } catch (err) {
+      toast.error(err?.message || 'Unable to create proctor account');
+    } finally {
+      setCreatingProctor(false);
+    }
+  };
+
   const renderAssignmentPicker = (title, items, selectedIds, search, setSearch, field) => (
     <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-950/40 p-3">
       <div className="flex items-center justify-between gap-2">
@@ -363,7 +390,10 @@ export default function AdminExams() {
           <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Admin</p>
           <h1 className="mt-2 text-3xl font-semibold text-white">Exam timeline</h1>
         </div>
-        <Button onClick={openCreateModal}>Create exam</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="ghost" onClick={() => setProctorModalOpen(true)}>Add proctor</Button>
+          <Button onClick={openCreateModal}>Create exam</Button>
+        </div>
       </div>
 
       {exams.length ? (
@@ -559,6 +589,52 @@ export default function AdminExams() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        open={proctorModalOpen}
+        onClose={() => setProctorModalOpen(false)}
+        title="Create proctor account"
+        description="Only an Admin can create proctor accounts. The new account will be available for exam assignment."
+        size="md"
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            saveProctor();
+          }}
+        >
+          <Input
+            label="Name"
+            autoComplete="name"
+            required
+            minLength={2}
+            value={proctorDraft.name}
+            onChange={(event) => setProctorDraft((current) => ({ ...current, name: event.target.value }))}
+          />
+          <Input
+            label="Email"
+            type="email"
+            autoComplete="email"
+            required
+            value={proctorDraft.email}
+            onChange={(event) => setProctorDraft((current) => ({ ...current, email: event.target.value }))}
+          />
+          <Input
+            label="Temporary password"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            value={proctorDraft.password}
+            onChange={(event) => setProctorDraft((current) => ({ ...current, password: event.target.value }))}
+          />
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setProctorModalOpen(false)}>Cancel</Button>
+            <Button type="submit" loading={creatingProctor}>Create proctor</Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

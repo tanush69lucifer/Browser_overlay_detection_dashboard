@@ -111,7 +111,7 @@ Live exam-integrity dashboard that detects configured browser overlay indicators
 ## Features
 - Candidate exam sessions with answers and live integrity detection
 - Proctor console with session status, flags, and reports
-- Admin exam assignment, fingerprint management, and scoring thresholds
+- Admin proctor-account creation, exam assignment, fingerprint management, and scoring thresholds
 - Admin report summaries/exports without candidate drill-down or flag review controls
 - Configurable scoring thresholds and real-time Socket.IO events
 - CSV reports and browser Print / Save as PDF
