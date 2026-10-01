@@ -10,6 +10,8 @@
 
 Modern academic dishonesty often relies on software overlays, AI sidebars (Sider, Monica, Copilot, ChatGPT), and floating browser extensions that hover over exam windows to provide unauthorized assistance. Traditional proctoring tools frequently resort to invasive webcam surveillance or OS kernel-level spyware.
 
+Cluely is included as a configurable/best-effort DOM fingerprint (`id`/`class` containing `cluely`, or `cluely-overlay` / `cluely-assistant`). Detection works only when the tool exposes a footprint to the exam page DOM or triggers one of the browser focus/visibility signals. A separate desktop window or browser-chrome overlay is outside page JavaScript's visibility; the detector must not claim that it identified Cluely by brand in that case.
+
 This engine introduces a **lightweight, privacy-first client-side detector** running directly in the browser sandbox. It evaluates DOM mutations, computed CSS properties, shadow roots, iframe origins, window focus states, and extension fingerprints in real-time—streaming compact telemetry deltas without capturing keystrokes or camera feeds.
 
 ---
@@ -88,7 +90,11 @@ To prevent candidate platform UI from triggering false alarms:
 ## 5. Security & Privacy Guarantees
 
 * **Zero Keystroke Logging:** The detector does not capture keyboard inputs or typed responses.
+<<<<<<< HEAD
+* **Paste Privacy:** The browser exposes the pasted text to the paste event; the detector measures its length in memory, then only the length integer (`meta.length`) is transmitted. It does not retain or send the text.
+=======
 * **No Clipboard Inspection:** Paste detection records only that a paste event occurred. It does not read clipboard contents or text length.
+>>>>>>> origin/main
 * **No Video/Camera Surveillance:** Works entirely through client browser telemetry without requiring webcam hardware.
 * **Optional active-tab metadata:** The separate browser companion requires the browser's `tabs` permission. During an active exam it reports only the active HTTP(S) tab's origin/path and title; query strings and fragments are removed. It does not read page text or collect browsing history. Without the companion, only the exam page's ordinary focus/visibility events are available.
 * **Flag evidence retention:** Signals are processed in memory/Redis; when signals contribute to a flag, their compact metadata is retained in that flag's evidence for Proctor review. This includes sanitized active-tab origin/path and title when the companion is installed.

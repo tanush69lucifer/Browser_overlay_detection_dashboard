@@ -1,3 +1,14 @@
+<<<<<<< HEAD
+import { DETECTOR_CONFIG } from './config.js';
+import { scanFingerprints } from './fingerprints.js';
+import { createScanner } from './scanner.js';
+import { startFocusSignals } from './focus.js';
+import { createBatcher } from './batcher.js';
+import { startHeartbeat } from './heartbeat.js';
+
+/** Start the browser-sandbox integrity detector for one active exam session. */
+export function startDetector({ socket, sessionId, fingerprints = [] }) {
+=======
 import { scanFingerprints } from './fingerprints';
 import {
   isProctorElement,
@@ -31,11 +42,20 @@ import { startHeartbeat } from './heartbeat';
  * and maintains 12s candidate heartbeat.
  */
 export function startDetector({ socket, sessionId, fingerprints = [], onExtensionStatus = () => {} }) {
+>>>>>>> origin/main
   if (!sessionId) {
-    console.warn('[Detector] startDetector called without sessionId. Aborting.');
+    console.warn('[Detector] startDetector called without sessionId.');
     return () => {};
   }
 
+<<<<<<< HEAD
+  const batcher = createBatcher({ socket, sessionId });
+  const scanner = createScanner();
+  let stopped = false;
+  let scanTimer = null;
+  let mutationTimer = null;
+  const queuedNodes = new Set();
+=======
   // 1. Establish baseline DOM metrics
   const baselineBodyChildren = document.body
     ? [...document.body.children].filter((child) => !isProctorElement(child)).length
@@ -84,10 +104,19 @@ export function startDetector({ socket, sessionId, fingerprints = [], onExtensio
     type: 'SESSION_START',
     sessionId,
   }, window.location.origin);
+>>>>>>> origin/main
 
-  // 3. Core DOM scan routine
-  const runDomScan = () => {
+  const enqueueAll = signals => signals.forEach(signal => batcher.enqueue(signal));
+  const runScan = () => {
+    if (stopped) return;
     try {
+<<<<<<< HEAD
+      enqueueAll(scanner.scanTopLevel([...queuedNodes]));
+      queuedNodes.clear();
+      enqueueAll(scanFingerprints(fingerprints));
+    } catch (error) {
+      console.warn('[Detector] DOM scan error:', error);
+=======
       const detections = [
         ...scanFingerprints(fingerprints),
         ...scanHighZNodes(),
@@ -122,12 +151,31 @@ export function startDetector({ socket, sessionId, fingerprints = [], onExtensio
       }
     } catch (err) {
       console.warn('[Detector] DOM scan error:', err);
+>>>>>>> origin/main
     }
   };
 
-  // Perform immediate initial sweep
-  runDomScan();
+  // Initial snapshot sets the DOM baseline before injected nodes are counted.
+  runScan();
 
+<<<<<<< HEAD
+  // MutationObserver is the fast path; periodic scans catch style/layout changes
+  // that do not produce a DOM mutation. Both paths share one throttled scan.
+  const observer = typeof MutationObserver === 'function'
+    ? new MutationObserver(records => {
+      for (const record of records) {
+        if (record.type === 'attributes' && record.target instanceof Element) queuedNodes.add(record.target);
+        for (const node of record.addedNodes || []) if (node instanceof Element) queuedNodes.add(node);
+      }
+      if (mutationTimer === null) {
+        mutationTimer = setTimeout(() => {
+          mutationTimer = null;
+          runScan();
+        }, 150);
+      }
+    })
+    : null;
+=======
   // 4. Setup MutationObserver for real-time DOM injection monitoring
   let mutationDebounceTimer = null;
   const observer = new MutationObserver((records) => {
@@ -143,25 +191,34 @@ export function startDetector({ socket, sessionId, fingerprints = [], onExtensio
       runDomScan();
     }, 250);
   });
+>>>>>>> origin/main
 
-  try {
-    if (document.body) {
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['style', 'class', 'src'],
-      });
-    }
-    if (document.documentElement) {
-      observer.observe(document.documentElement, {
-        childList: true,
-      });
-    }
-  } catch (obsErr) {
-    console.warn('[Detector] MutationObserver initialization error:', obsErr);
+  if (observer && document.documentElement) {
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style', 'class', 'id', 'src'],
+    });
   }
 
+<<<<<<< HEAD
+  scanTimer = setInterval(runScan, DETECTOR_CONFIG.scanIntervalMs);
+  const stopFocus = startFocusSignals(signal => batcher.enqueue(signal));
+  const stopHeartbeat = startHeartbeat({ socket, sessionId });
+
+  console.info(`[Detector] Integrity monitoring started for session: ${sessionId}`);
+  return function stop() {
+    if (stopped) return;
+    stopped = true;
+    if (mutationTimer !== null) clearTimeout(mutationTimer);
+    if (scanTimer !== null) clearInterval(scanTimer);
+    observer?.disconnect();
+    stopFocus();
+    stopHeartbeat();
+    // Drain over HTTP before the caller disconnects the session socket.
+    return batcher.stop();
+=======
   // 5. Periodic background sweep timer (every 3 seconds)
   const periodicScanTimer = setInterval(runDomScan, 3000);
 
@@ -192,6 +249,7 @@ export function startDetector({ socket, sessionId, fingerprints = [], onExtensio
     window.removeEventListener('message', handleExtensionMessage);
     onExtensionStatus(false);
     await batcher.stop();
+>>>>>>> origin/main
   };
   stop.flush = () => batcher.flush();
   return stop;
