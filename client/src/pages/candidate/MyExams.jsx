@@ -106,9 +106,10 @@ export default function MyExams() {
       );
     }
 
-    const liveCount = exams.filter((exam) => statusByDate(exam.startAt, exam.endAt) === 'Live').length;
-    const upcomingCount = exams.filter((exam) => statusByDate(exam.startAt, exam.endAt) === 'Upcoming').length;
-    const endedCount = exams.length - liveCount - upcomingCount;
+    const isCompleted = (exam) => exam.mySessionStatus === 'ENDED';
+    const liveCount = exams.filter((exam) => !isCompleted(exam) && statusByDate(exam.startAt, exam.endAt) === 'Live').length;
+    const upcomingCount = exams.filter((exam) => !isCompleted(exam) && statusByDate(exam.startAt, exam.endAt) === 'Upcoming').length;
+    const endedCount = exams.filter((exam) => isCompleted(exam) || statusByDate(exam.startAt, exam.endAt) === 'Ended').length;
 
     return (
       <div className="space-y-5">
@@ -129,8 +130,10 @@ export default function MyExams() {
         </div>
         <div className="space-y-4">
           {exams.map((exam) => {
-          const status = statusByDate(exam.startAt, exam.endAt);
+          const completed = isCompleted(exam);
+          const status = completed ? 'Completed' : statusByDate(exam.startAt, exam.endAt);
           const isLive = status === 'Live';
+          const canResume = !completed && Boolean(exam.mySessionStatus);
           const statusTone = isLive ? 'OK' : status === 'Upcoming' ? 'INFO' : 'NEUTRAL';
           return (
             <Card key={exam._id || exam.id} className="p-4 hover:border-slate-500/80 md:p-5">
@@ -161,14 +164,14 @@ export default function MyExams() {
 
                 <div className="flex items-center justify-end">
                   <Button
-                    variant={isLive ? 'primary' : 'ghost'}
-                    disabled={!isLive}
+                    variant={isLive && !completed ? 'primary' : 'ghost'}
+                    disabled={!isLive || completed}
                     onClick={() => startExam(exam._id || exam.id)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') event.preventDefault();
                     }}
                   >
-                    {isLive ? 'Start' : 'Not live'}
+                    {completed ? 'Completed' : isLive ? (canResume ? 'Resume' : 'Start') : 'Not live'}
                   </Button>
                 </div>
               </div>

@@ -133,13 +133,10 @@ export default function ExamPage() {
 
     try {
       setSubmitting(true);
+      let signalsDelivered = true;
       if (stopDetectorRef.current) {
         const stopDetector = stopDetectorRef.current;
-        const signalsDelivered = await stopDetector.flush();
-        if (!signalsDelivered) {
-          toast.error('Monitoring events are still queued. Check your connection and submit again.');
-          return;
-        }
+        signalsDelivered = await stopDetector.flush();
         stopDetectorRef.current = null;
         await stopDetector();
       }
@@ -147,6 +144,9 @@ export default function ExamPage() {
       setSubmitted(true);
       cleanupSession();
       toast.success('Exam submitted successfully');
+      if (!signalsDelivered) {
+        toast('Some monitoring events could not be synced before submission.', { icon: '⚠️' });
+      }
     } catch (err) {
       toast.error(err?.message || 'Unable to submit your exam');
     } finally {
