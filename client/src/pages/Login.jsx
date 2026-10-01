@@ -6,12 +6,6 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Card from '../components/ui/Card';
 
-const DEMO_ACCOUNTS = [
-  { role: 'Admin', email: 'admin@demo.com', password: 'Admin@123' },
-  { role: 'Proctor', email: 'proctor@demo.com', password: 'Proctor@123' },
-  { role: 'Candidate', email: 'candidate@demo.com', password: 'Candidate@123' },
-];
-
 const initialState = { email: '', password: '' };
 
 export default function Login() {
@@ -66,22 +60,14 @@ export default function Login() {
             </p>
           </div>
 
-          <div className="mt-8 space-y-3 rounded-2xl border border-slate-700/80 bg-slate-950/40 p-4">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Demo accounts</div>
-            {DEMO_ACCOUNTS.map((account) => (
-              <button
-                key={account.email}
-                type="button"
-                className="flex w-full items-center justify-between rounded-xl border border-slate-700 bg-slate-900/40 px-3 py-2 text-left text-sm text-slate-200 transition hover:border-primary/50 hover:bg-slate-800/80"
-                onClick={() => setForm({ email: account.email, password: account.password })}
-              >
-                <span>
-                  <span className="font-medium text-white">{account.role}</span>
-                  <span className="ml-2 text-slate-400">{account.email}</span>
-                </span>
-                <span className="text-xs text-primary">Use</span>
-              </button>
-            ))}
+          <div className="mt-8 rounded-2xl border border-slate-700/80 bg-slate-950/40 p-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-white">
+              <span className="h-2.5 w-2.5 rounded-full bg-ok" />
+              Privacy-first monitoring
+            </div>
+            <p className="mt-2 text-sm text-slate-300">
+              Integrity signals are limited to overlay metadata and focus events. Keystrokes, camera and screen are not captured.
+            </p>
           </div>
         </div>
 
