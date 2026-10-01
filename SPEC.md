@@ -177,7 +177,7 @@ stop(); // disconnects observers, clears timers, flushes remaining signals
 
 **Exam page flow (owner Tanisha)**, `pages/candidate/ExamPage.jsx`:
 1. `GET /exams/:examId` -> show title, questions, timer.
-2. Show the monitoring notice (overlay/focus metadata; optional companion reports active-tab URL/title without query strings or page text; what is not collected: keystrokes, screen, camera). Button "Start exam".
+2. Show clear candidate exam rules: work independently, stay on the exam page/fullscreen, use only explicitly permitted resources, and do not use unauthorized websites, AI/helper tools, extensions, people, or devices. Explain that focus/integrity signals (and optional companion active-tab URL/title metadata) go to the assigned proctor for review and are not a verdict on their own. Button "I understand — Start exam".
 3. `POST /exams/:examId/sessions` with `{ userAgent: navigator.userAgent, screen: { w: innerWidth, h: innerHeight } }` -> `sessionId`.
 4. `GET /fingerprints/active`.
 5. `socket = createSocket()`; on `connect` emit `session:join { sessionId }`.

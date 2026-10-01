@@ -237,33 +237,36 @@ export default function ExamPage() {
       <Modal
         open={!monitoringStarted && !submitted}
         onClose={() => navigate('/candidate')}
-        title="Monitoring notice"
-        description="Before the timer starts, here is what the platform captures and what it does not."
+        title="Before you begin: exam rules"
+        description="Please read these instructions before starting. Your exam timer begins when monitoring starts."
         size="md"
       >
         <div className="space-y-5">
           <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-            <h4 className="font-semibold text-emerald-200">What is collected</h4>
+            <h4 className="font-semibold text-emerald-200">During the exam</h4>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-200">
-              <li>Overlay and extension metadata</li>
-              <li>Focus and visibility events</li>
-              <li>With the optional browser companion installed: active-tab URL and title, without query strings or page text</li>
-              <li>Browser integrity signals during active monitoring</li>
+              <li>Answer the questions independently using your own knowledge.</li>
+              <li>Stay on this exam page and keep the exam in fullscreen.</li>
+              <li>Use only books, tools, and other materials that the exam instructions explicitly permit.</li>
+              <li>If a technical issue occurs or you need to leave the exam page, contact your proctor and explain what happened.</li>
             </ul>
           </div>
 
           <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
-            <h4 className="font-semibold text-red-200">What is not collected</h4>
+            <h4 className="font-semibold text-red-200">Not permitted</h4>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-200">
-              <li>No keystrokes or clipboard text</li>
-              <li>No live camera or screen capture</li>
-              <li>No personal files or browsing-history collection</li>
-              <li>Without the companion extension, other-tab URLs and titles are unavailable</li>
+              <li>Do not open other websites, search engines, messaging apps, or AI answer tools during the exam.</li>
+              <li>Do not use unauthorized browser extensions, overlays, helper tools, another person, or another device to get answers.</li>
+              <li>Do not copy questions or answers elsewhere, or paste in answers from another source.</li>
             </ul>
           </div>
 
+          <p className="text-sm leading-6 text-slate-300">
+            Monitoring can record exam-page focus changes and integrity signals. If the optional browser companion is installed, it can also report the active tab’s title and sanitized URL—not page text. Signals are sent to your assigned proctor for review; a signal by itself is not a decision that you broke the rules.
+          </p>
+
           <div className="flex justify-end">
-            <Button onClick={startMonitoring}>Start exam</Button>
+            <Button onClick={startMonitoring}>I understand — Start exam</Button>
           </div>
         </div>
       </Modal>

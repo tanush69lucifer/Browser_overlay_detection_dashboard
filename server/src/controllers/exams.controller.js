@@ -55,8 +55,15 @@ const listExams = asyncHandler(async (req, res) => {
   const projection =
     role === 'CANDIDATE' ? 'title description startAt endAt durationMin' : '-questions';
 
+  const examsQuery = Exam.find(filter)
+    .select(projection)
+    .sort(sort)
+    .skip((page - 1) * limit)
+    .limit(limit);
+  if (role === 'ADMIN') examsQuery.populate('proctorIds', 'name email');
+
   const [docs, total] = await Promise.all([
-    Exam.find(filter).select(projection).sort(sort).skip((page - 1) * limit).limit(limit).lean(),
+    examsQuery.lean(),
     Exam.countDocuments(filter),
   ]);
 
@@ -69,10 +76,19 @@ const listExams = asyncHandler(async (req, res) => {
     const statusByExam = new Map(sessions.map((s) => [String(s.examId), s.status]));
     items = docs.map((d) => ({ ...d, mySessionStatus: statusByExam.get(String(d._id)) || null }));
   } else {
-    items = docs.map(({ candidateIds, proctorIds, ...rest }) => ({
+    items = docs.map(({ candidateIds = [], proctorIds = [], ...rest }) => ({
       ...rest,
       candidateCount: candidateIds.length,
       proctorCount: proctorIds.length,
+      ...(role === 'ADMIN'
+        ? {
+            proctors: proctorIds.filter(Boolean).map(({ _id, name, email: proctorEmail }) => ({
+              id: String(_id),
+              name,
+              email: proctorEmail,
+            })),
+          }
+        : {}),
     }));
   }
 

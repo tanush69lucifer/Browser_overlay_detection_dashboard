@@ -393,8 +393,23 @@ export default function AdminExams() {
                         {exam.sensitivity || 'MEDIUM'}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3">{(exam.candidateIds || []).length}</td>
-                    <td className="px-4 py-3">{(exam.proctorIds || []).length}</td>
+                    <td className="px-4 py-3">{exam.candidateCount ?? (exam.candidateIds || []).length}</td>
+                    <td className="px-4 py-3">
+                      {exam.proctors?.length ? (
+                        <div className="space-y-1">
+                          {exam.proctors.map((proctor) => (
+                            <div key={proctor.id || proctor.email}>
+                              <div className="font-medium text-slate-100">{proctor.name}</div>
+                              <div className="text-xs text-slate-400">{proctor.email}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">
+                          {exam.proctorCount ?? (exam.proctorIds || []).length} assigned
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <Button
                         variant="ghost"
