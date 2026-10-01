@@ -206,6 +206,24 @@ export default function AdminExams() {
     });
   };
 
+  const toggleFingerprint = (fingerprintId) => {
+    const activeIds = fingerprints
+      .filter((fingerprint) => fingerprint.isActive)
+      .map((fingerprint) => String(fingerprint._id || fingerprint.id));
+    setDraft((current) => {
+      const selectedIds = current.fingerprintIds.length
+        ? current.fingerprintIds
+        : activeIds;
+      const nextIds = selectedIds.includes(fingerprintId)
+        ? selectedIds.filter((id) => id !== fingerprintId)
+        : [...selectedIds, fingerprintId];
+      return {
+        ...current,
+        fingerprintIds: nextIds.length === activeIds.length ? [] : nextIds,
+      };
+    });
+  };
+
   const updateQuestion = (index, field, value) => {
     setDraft((current) => ({
       ...current,
@@ -357,12 +375,21 @@ export default function AdminExams() {
 
   const renderFingerprintPicker = () => (
     <div className="space-y-4 rounded-2xl border border-slate-700 bg-slate-950/40 p-4">
-      <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
         <h4 className="font-medium text-white">Detection checks</h4>
         <p className="mt-1 text-xs leading-5 text-slate-400">
-          All built-in checks and every active fingerprint from Admin → Fingerprints apply automatically to this exam.
-          Turn off a configured fingerprint there if it should not be used.
+          Built-in checks are always on. Choose which active configured fingerprints apply to this exam.
         </p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          className="shrink-0 px-3 py-2 text-xs"
+          onClick={() => setDraft((current) => ({ ...current, fingerprintIds: [] }))}
+        >
+          Select all active
+        </Button>
       </div>
       <div>
         <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">Built-in checks · always on</p>
@@ -374,8 +401,12 @@ export default function AdminExams() {
       </div>
       <div>
         <div className="mb-2 flex items-center justify-between gap-2">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Configured active fingerprints</p>
-          <span className="text-xs text-slate-400">{filteredFingerprints.filter((item) => item.isActive).length} shown</span>
+          <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Configured fingerprints</p>
+          <span className="text-xs text-slate-400">
+            {draft.fingerprintIds.length === 0
+              ? `${fingerprints.filter((item) => item.isActive).length} active · all selected`
+              : `${draft.fingerprintIds.length} selected`}
+          </span>
         </div>
         <Input
           value={fingerprintSearch}
@@ -383,11 +414,42 @@ export default function AdminExams() {
           placeholder="Search configured fingerprints"
         />
         <div className="mt-3 flex max-h-40 flex-wrap gap-2 overflow-auto">
-          {filteredFingerprints.filter((item) => item.isActive).length ? filteredFingerprints.filter((item) => item.isActive).map((fingerprint) => (
-            <Badge key={fingerprint._id || fingerprint.id} tone={fingerprint.allowed ? 'LOW' : fingerprint.severity}>
-              {fingerprint.name}{fingerprint.allowed ? ' · Allowed' : ''}
-            </Badge>
-          )) : <span className="text-xs text-slate-400">No configured active fingerprints match. Built-in checks remain on.</span>}
+          {filteredFingerprints.length ? filteredFingerprints.map((fingerprint) => {
+            const id = String(fingerprint._id || fingerprint.id);
+            const selected = draft.fingerprintIds.length === 0
+              ? fingerprint.isActive
+              : draft.fingerprintIds.includes(id);
+            const severityTone = fingerprint.allowed ? 'LOW' : fingerprint.severity;
+            return (
+              <button
+                type="button"
+                key={id}
+                aria-pressed={selected}
+                disabled={!fingerprint.isActive && !draft.fingerprintIds.includes(id)}
+                onClick={() => toggleFingerprint(id)}
+                className={[
+                  'inline-flex min-h-10 items-center gap-2 rounded-xl border px-3 py-2 text-left text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+                  selected
+                    ? 'border-primary/70 bg-primary/15 text-white'
+                    : 'border-slate-700 bg-slate-900/70 text-slate-300 hover:border-slate-500',
+                  !fingerprint.isActive ? 'cursor-not-allowed opacity-45' : '',
+                ].join(' ')}
+              >
+                <span
+                  aria-hidden="true"
+                  className={[
+                    'flex h-4 w-4 items-center justify-center rounded border text-[10px] font-bold',
+                    selected ? 'border-primary bg-primary text-white' : 'border-slate-500 text-transparent',
+                  ].join(' ')}
+                >
+                  ✓
+                </span>
+                <span>{fingerprint.name}</span>
+                <Badge tone={severityTone}>{fingerprint.allowed ? 'Allowed' : fingerprint.severity}</Badge>
+                {!fingerprint.isActive ? <span className="text-slate-500">Inactive</span> : null}
+              </button>
+            );
+          }) : <span className="text-xs text-slate-400">No configured fingerprints match. Built-in checks remain on.</span>}
         </div>
       </div>
     </div>
