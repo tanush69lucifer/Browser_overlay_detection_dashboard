@@ -26,9 +26,16 @@ export function startDetector({ socket, sessionId, fingerprints = [], onExtensio
   const appearanceCounts = new Map();
   let stopped = false;
 
+  const announceSessionToExtension = () => {
+    window.postMessage({ source: 'overlay-proctor-page', type: 'SESSION_START', sessionId }, window.location.origin);
+  };
   const handleExtensionMessage = event => {
     if (event.source !== window || event.origin !== window.location.origin) return;
     if (event.data?.source !== 'overlay-proctor-extension') return;
+    if (event.data.type === 'EXTENSION_READY') {
+      announceSessionToExtension();
+      return;
+    }
     if (event.data.type === 'EXTENSION_STATUS') {
       onExtensionStatus(Boolean(event.data.ok && event.data.connected));
       return;
@@ -54,7 +61,7 @@ export function startDetector({ socket, sessionId, fingerprints = [], onExtensio
     } catch { /* Ignore malformed companion messages. */ }
   };
   window.addEventListener('message', handleExtensionMessage);
-  window.postMessage({ source: 'overlay-proctor-page', type: 'SESSION_START', sessionId }, window.location.origin);
+  announceSessionToExtension();
 
   const runDomScan = () => {
     if (stopped) return;

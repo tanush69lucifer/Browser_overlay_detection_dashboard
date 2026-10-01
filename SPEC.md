@@ -186,7 +186,8 @@ stop(); // disconnects observers, clears timers, flushes remaining signals
 8. Submit -> `POST /sessions/:id/end { answers }` -> `stop()`, `socket.disconnect()`, success screen.
 9. On unmount: `stop()` + `socket.disconnect()`.
 
-The optional browser companion requires the browser `tabs` permission and must be installed
+The optional browser companion requires the browser `tabs` and `scripting` permissions, local
+application host access, and must be installed
 by the candidate. Without it, only ordinary exam-tab focus/visibility changes are available.
 
 **Proctor live store (owner Tanya)**, `store/live.js` (zustand): `sessions` keyed by `_id`, `order` (array of ids), `feed` (latest 100 flags), `summary`. Tiles subscribe to their own entry (`useLive((s) => s.sessions[id])`) so one event re-renders one tile, never the whole grid.

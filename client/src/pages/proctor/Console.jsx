@@ -402,21 +402,37 @@ export default function Console() {
                       {item.kind === 'FLAG' ? flagTitle(item) : signalLabel(item.code)}
                     </p>
                     <p className="mt-1 text-xs text-slate-400">
-                      {item.candidate?.name || 'Candidate'} · {formatTime(item.t || item.raisedAt)}
+                      {item.candidate?.name || 'Candidate'} · {formatTime(item.kind === 'FLAG' ? flagEventTime(item) : item.t || item.occurredAt || item.raisedAt)}
                     </p>
                   </div>
                   <Badge tone={severityTone(item.severity)}>{item.severity || 'LOW'}</Badge>
                 </div>
                 {item.kind === 'FLAG' ? (
-                  <Button
-                    variant="ghost"
-                    className="mt-3 w-full"
-                    onClick={() => navigate(`/proctor/session/${item.sessionId}`)}
-                  >
-                    Review candidate
-                  </Button>
+                  <>
+                    {flagTool(item) ? (
+                      <p className="mt-2 text-sm text-slate-300">Detected tool: <span className="font-medium text-white">{flagTool(item)}</span></p>
+                    ) : null}
+                    <Button
+                      variant="ghost"
+                      className="mt-3 w-full"
+                      onClick={() => navigate(`/proctor/session/${item.sessionId}`)}
+                    >
+                      Review candidate flag
+                    </Button>
+                  </>
                 ) : (
-                  <p className="mt-2 text-xs text-slate-400">{signalDescription(item)}</p>
+                  <>
+                    <p className="mt-2 text-sm text-slate-300">{signalDescription(item)}</p>
+                    {item.sessionId ? (
+                      <Button
+                        variant="ghost"
+                        className="mt-3 w-full"
+                        onClick={() => navigate(`/proctor/session/${item.sessionId}`)}
+                      >
+                        Open candidate session
+                      </Button>
+                    ) : null}
+                  </>
                 )}
               </div>
             )) : (
