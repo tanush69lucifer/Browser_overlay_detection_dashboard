@@ -12,86 +12,105 @@ import api from '../api/client';
 
 const FLUSH_INTERVAL_MS = 2500;
 const MAX_BATCH_SIZE = 50;
-const LOCAL_DEDUPE_MS = 6000;
+const ACK_TIMEOUT_MS = 5000;
 
 export function createBatcher({ socket, sessionId }) {
+  const storageKey = `proctor:signalQueue:${sessionId}`;
   let queue = [];
-  const recentDispatches = new Map(); // key -> last dispatch timestamp
+  try {
+    const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    if (Array.isArray(stored)) queue = stored;
+  } catch (error) {
+    console.warn('[Detector] Unable to restore queued signals:', error);
+  }
   let timer = null;
   let isStopped = false;
+  let flushPromise = null;
 
-  // Flush queued signals to server
-  const flush = async () => {
-    if (queue.length === 0 || isStopped) return;
-
-    const signalsToSend = queue.splice(0, MAX_BATCH_SIZE);
-    const payload = {
-      sessionId,
-      signals: signalsToSend,
-    };
-
-    // 1. Attempt delivery via Socket.IO if connected
-    let deliveredViaSocket = false;
-    if (socket && socket.connected) {
-      try {
-        socket.emit('signals:batch', payload, (ack) => {
-          if (ack && ack.ok) {
-            deliveredViaSocket = true;
-          }
-        });
-        deliveredViaSocket = true;
-      } catch (err) {
-        console.warn('[Detector] Socket emission failed, falling back to HTTP:', err);
-      }
-    }
-
-    // 2. HTTP Fallback per SPEC Section 5 (POST /sessions/:id/signals)
-    if (!deliveredViaSocket) {
-      try {
-        await api.post(`/sessions/${sessionId}/signals`, { signals: signalsToSend });
-      } catch (httpErr) {
-        console.warn('[Detector] HTTP signal fallback error:', httpErr);
-      }
+  const persist = () => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(queue));
+    } catch (error) {
+      console.warn('[Detector] Unable to persist queued signals:', error);
     }
   };
 
-  // Add signal to queue with local debouncing and immediate HIGH severity flush
-  const enqueue = (signal) => {
-    if (isStopped || !signal) return;
+  const flush = async (force = false) => {
+    if (flushPromise) return flushPromise;
+    if (queue.length === 0) return true;
+    if (isStopped && !force) return false;
 
-    // Local deduplication for keyed signals
-    if (signal.key) {
-      const dedupeKey = `${signal.code}:${signal.key}`;
-      const lastSent = recentDispatches.get(dedupeKey) || 0;
-      if (Date.now() - lastSent < LOCAL_DEDUPE_MS) {
-        return; // Skip duplicate within debounce window
+    let delivered = false;
+    flushPromise = (async () => {
+      const signalsToSend = queue.slice(0, MAX_BATCH_SIZE);
+      const payload = { sessionId, signals: signalsToSend };
+
+      if (socket?.connected) {
+        delivered = await new Promise((resolve) => {
+          const timeout = setTimeout(() => resolve(false), ACK_TIMEOUT_MS);
+          try {
+            socket.emit('signals:batch', payload, (ack) => {
+              clearTimeout(timeout);
+              resolve(Boolean(ack?.ok));
+            });
+          } catch (error) {
+            clearTimeout(timeout);
+            console.warn('[Detector] Socket emission failed:', error);
+            resolve(false);
+          }
+        });
       }
-      recentDispatches.set(dedupeKey, Date.now());
+
+      if (!delivered) {
+        try {
+          await api.post(`/sessions/${sessionId}/signals`, { signals: signalsToSend });
+          delivered = true;
+        } catch (error) {
+          console.warn('[Detector] HTTP signal fallback failed; signals remain queued:', error);
+        }
+      }
+
+      if (delivered) {
+        queue.splice(0, signalsToSend.length);
+        persist();
+      } else {
+        persist();
+      }
+      return delivered;
+    })();
+
+    let deliveredBatch = false;
+    try {
+      deliveredBatch = await flushPromise;
+    } finally {
+      flushPromise = null;
     }
 
-    queue.push(signal);
+    if (deliveredBatch && queue.length > 0 && (!isStopped || force)) return flush(force);
+    return queue.length === 0;
+  };
 
-    // Rule: Immediately flush on any HIGH severity signal (KNOWN_FINGERPRINT, EXTENSION_IFRAME)
+  const enqueue = (signal) => {
+    if (isStopped || !signal) return;
+    const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    queue.push({ ...signal, id });
+    persist();
     if (signal.severity === 'HIGH' || queue.length >= MAX_BATCH_SIZE) {
-      flush();
+      void flush();
     }
   };
 
   // Periodic flush timer (2.5s)
   timer = setInterval(flush, FLUSH_INTERVAL_MS);
 
-  // Teardown and final flush
   const stop = () => {
-    isStopped = true;
     if (timer) {
       clearInterval(timer);
       timer = null;
     }
-    // Final flush of remaining items
-    if (queue.length > 0) {
-      flush();
-    }
-    recentDispatches.clear();
+    isStopped = true;
+    persist();
+    return flush(true);
   };
 
   return {

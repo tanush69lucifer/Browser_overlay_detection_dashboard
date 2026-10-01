@@ -66,7 +66,7 @@ export default function Login() {
               Privacy-first monitoring
             </div>
             <p className="mt-2 text-sm text-slate-300">
-              Integrity signals are limited to overlay metadata and focus events. Keystrokes, camera and screen are not captured.
+              Integrity signals use overlay metadata and focus events. With the optional browser companion, active-tab URL/title metadata is also shared during an exam. Page text, keystrokes, camera and screen are not captured.
             </p>
           </div>
         </div>

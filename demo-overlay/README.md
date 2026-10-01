@@ -12,11 +12,17 @@ Used during proctoring demonstrations and test evaluation to show real-time dete
 4. Select this directory (`demo-overlay`).
 
 ## Usage
-- Open any web page (or the exam candidate window `http://localhost:5173/candidate/exam/:id`).
+- Start an assigned candidate exam with monitoring active.
+- In Admin > Fingerprints, make sure the `Demo overlay extension` matcher is
+  `#proctor-demo-overlay`, active, and selected for the exam's fingerprint set.
+- Open the candidate exam page (`http://localhost:5175/candidate/exam/:id`).
 - Press **Alt+O** (or click the extension puzzle piece icon).
 - The floating AI overlay appears in the top-right corner.
-- Within 2 seconds, the client detector captures:
-  - `FIXED_HIGH_Z_NODE` (MED)
-  - `KNOWN_FINGERPRINT` (HIGH)
-- The Proctor Console immediately receives the signal delta, flashes a 1.5s red pulse ring, and raises candidate severity to HIGH.
+- The client detector should report a `KNOWN_FINGERPRINT` signal (HIGH) and may
+  also report `FIXED_HIGH_Z_NODE`. The persistent-overlay heuristic escalates
+  after five seconds if the node is large enough in the current viewport.
+- The Proctor live feed receives the signal; high-severity detections raise a flag.
 - Press **Alt+O** again to dismiss the overlay.
+
+This is a controlled detector-test helper, not part of the production exam flow.
+Use it only in a test exam/session.

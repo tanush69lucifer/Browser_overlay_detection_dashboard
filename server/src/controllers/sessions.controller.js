@@ -51,8 +51,10 @@ const endSession = asyncHandler(async (req, res) => {
   if (!session) throw new ApiError(404, 'NOT_FOUND', 'Session not found');
 
   if (session.status !== 'ENDED') {
+    const exam = await Exam.findById(session.examId).select('startAt endAt').lean();
+    if (!exam) throw new ApiError(404, 'NOT_FOUND', 'Exam not found');
     session.status = 'ENDED';
-    session.endedAt = new Date();
+    session.endedAt = new Date(Math.min(Date.now(), new Date(exam.endAt).getTime()));
     session.answers = req.body.answers;
     await session.save();
 

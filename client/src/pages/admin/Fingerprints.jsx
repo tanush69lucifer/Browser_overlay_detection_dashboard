@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { createFingerprint, getFingerprints, updateFingerprint } from '../../api/admin';
+import {
+  createFingerprint,
+  getFingerprints,
+  getThresholds,
+  updateFingerprint,
+  updateThreshold,
+} from '../../api/admin';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
@@ -22,22 +28,35 @@ const EMPTY_FORM = {
   allowed: false,
 };
 
+const DEFAULT_THRESHOLDS = {
+  LOW: { sensitivity: 'LOW', windowMs: 60000, flagScore: 15 },
+  MEDIUM: { sensitivity: 'MEDIUM', windowMs: 60000, flagScore: 8 },
+  HIGH: { sensitivity: 'HIGH', windowMs: 60000, flagScore: 4 },
+};
+
 export default function Fingerprints() {
   const [items, setItems] = useState([]);
+  const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [draft, setDraft] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [savingThreshold, setSavingThreshold] = useState('');
 
   const loadFingerprints = async () => {
     try {
       setLoading(true);
       setError('');
-      const payload = await getFingerprints();
+      const [payload, thresholdPayload] = await Promise.all([getFingerprints(), getThresholds()]);
       const list = Array.isArray(payload?.items) ? payload.items : Array.isArray(payload) ? payload : [];
+      const thresholdList = Array.isArray(thresholdPayload?.items) ? thresholdPayload.items : [];
       setItems(list);
+      setThresholds({
+        ...DEFAULT_THRESHOLDS,
+        ...Object.fromEntries(thresholdList.map((threshold) => [threshold.sensitivity, threshold])),
+      });
     } catch (err) {
       setError(err?.message || 'Unable to load fingerprints');
     } finally {
@@ -78,11 +97,12 @@ export default function Fingerprints() {
 
     try {
       setSubmitting(true);
+      const fingerprintDraft = draft.allowed ? { ...draft, severity: 'LOW', weight: 1 } : draft;
       if (editingId) {
-        await updateFingerprint(editingId, draft);
+        await updateFingerprint(editingId, fingerprintDraft);
         toast.success('Fingerprint updated');
       } else {
-        await createFingerprint(draft);
+        await createFingerprint(fingerprintDraft);
         toast.success('Fingerprint created');
       }
       setModalOpen(false);
@@ -109,13 +129,35 @@ export default function Fingerprints() {
 
   const toggleAllowed = async (fingerprint) => {
     try {
+      const allowed = !fingerprint.allowed;
       await updateFingerprint(fingerprint._id || fingerprint.id, {
         ...fingerprint,
-        allowed: !fingerprint.allowed,
+        allowed,
+        ...(allowed ? { severity: 'LOW', weight: 1 } : {}),
       });
       await loadFingerprints();
     } catch (err) {
       toast.error(err?.message || 'Unable to update fingerprint');
+    }
+  };
+
+  const saveThreshold = async (sensitivity) => {
+    const threshold = thresholds[sensitivity];
+    const windowMs = Number(threshold.windowMs);
+    const flagScore = Number(threshold.flagScore);
+    if (!Number.isInteger(windowMs) || windowMs < 1000 || !Number.isInteger(flagScore) || flagScore < 1) {
+      toast.error('Window must be at least 1 second and score must be a positive integer');
+      return;
+    }
+    try {
+      setSavingThreshold(sensitivity);
+      const result = await updateThreshold(sensitivity, { windowMs, flagScore });
+      setThresholds((current) => ({ ...current, [sensitivity]: result.threshold }));
+      toast.success(`${sensitivity} sensitivity threshold saved`);
+    } catch (err) {
+      toast.error(err?.message || `Unable to save ${sensitivity} sensitivity threshold`);
+    } finally {
+      setSavingThreshold('');
     }
   };
 
@@ -143,6 +185,51 @@ export default function Fingerprints() {
         </div>
         <Button onClick={openCreate}>Add fingerprint</Button>
       </div>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-xl font-semibold text-white">Scoring thresholds</h2>
+          <p className="mt-1 text-sm text-slate-400">
+            Sensitivity changes scoring cutoffs only; the detector signals stay the same.
+          </p>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-3">
+          {Object.values(thresholds).map((threshold) => (
+            <Card key={threshold.sensitivity} className="space-y-4">
+              <h3 className="font-semibold text-white">{threshold.sensitivity}</h3>
+              <label className="block space-y-2 text-sm text-slate-300">
+                <span>Scoring window (milliseconds)</span>
+                <Input
+                  type="number"
+                  min="1000"
+                  step="1000"
+                  value={threshold.windowMs}
+                  onChange={(event) => setThresholds((current) => ({
+                    ...current,
+                    [threshold.sensitivity]: { ...current[threshold.sensitivity], windowMs: event.target.value },
+                  }))}
+                />
+              </label>
+              <label className="block space-y-2 text-sm text-slate-300">
+                <span>Flag score threshold</span>
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={threshold.flagScore}
+                  onChange={(event) => setThresholds((current) => ({
+                    ...current,
+                    [threshold.sensitivity]: { ...current[threshold.sensitivity], flagScore: event.target.value },
+                  }))}
+                />
+              </label>
+              <Button loading={savingThreshold === threshold.sensitivity} onClick={() => saveThreshold(threshold.sensitivity)}>
+                Save {threshold.sensitivity}
+              </Button>
+            </Card>
+          ))}
+        </div>
+      </section>
 
       {items.length ? (
         <Card className="overflow-hidden p-0">
@@ -218,6 +305,7 @@ export default function Fingerprints() {
                 { value: 'GLOBAL_VAR', label: 'GLOBAL_VAR' },
               ]}
             />
+            {draft.allowed ? <p className="text-xs text-slate-400">Allowed tools are retained as fingerprint evidence and scored LOW at weight 1.</p> : null}
             <Input label="Weight" type="number" value={draft.weight} onChange={(event) => setDraft((current) => ({ ...current, weight: Number(event.target.value) || 10 }))} />
           </div>
 

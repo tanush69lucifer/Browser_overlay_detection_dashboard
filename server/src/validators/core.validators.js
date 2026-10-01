@@ -51,6 +51,7 @@ const examFields = z.object({
   questions: z.array(questionSchema).max(100).default([]),
   candidateIds: z.array(objectId).max(1000).default([]),
   proctorIds: z.array(objectId).max(50).default([]),
+  fingerprintIds: z.array(objectId).max(100).default([]),
 });
 
 const endAfterStart = (d) => !(d.startAt && d.endAt) || d.endAt > d.startAt;
