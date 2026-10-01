@@ -21,6 +21,9 @@ async function loadActiveFingerprints() {
   if (fingerprintsCache && now - fingerprintsLoadedAt < CACHE_TTL_MS) {
     return fingerprintsCache;
   }
+  if (require('mongoose').connection.readyState !== 1) {
+    return fingerprintsCache || [];
+  }
   try {
     const list = await Fingerprint.find({ isActive: true }).lean();
     fingerprintsCache = list;
@@ -48,6 +51,10 @@ async function loadThresholds() {
     MEDIUM: { ...DEFAULT_THRESHOLDS.MEDIUM },
     HIGH: { ...DEFAULT_THRESHOLDS.HIGH },
   };
+
+  if (require('mongoose').connection.readyState !== 1) {
+    return thresholdsCache || map;
+  }
 
   try {
     const docs = await Threshold.find({}).lean();
@@ -88,6 +95,10 @@ async function getExamSensitivity(examId) {
   }
 
   let sensitivity = 'MEDIUM';
+  if (require('mongoose').connection.readyState !== 1) {
+    return sensitivity;
+  }
+
   try {
     const exam = await Exam.findById(examId).select('sensitivity').lean();
     if (exam && exam.sensitivity) {
