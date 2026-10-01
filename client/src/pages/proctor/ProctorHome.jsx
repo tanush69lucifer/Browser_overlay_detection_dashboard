@@ -52,11 +52,11 @@ export default function ProctorHome() {
   const endedCount = exams.length - liveCount - upcomingCount;
 
   return (
-    <div className="space-y-6">
+    <div className="relative z-10 space-y-7">
       <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Proctor workspace</p>
-        <h1 className="mt-2 text-3xl font-semibold text-white">Assigned exams</h1>
-        <p className="mt-2 text-sm text-slate-300">
+        <p className="text-xs font-medium uppercase tracking-[0.2em] text-primary">Proctor workspace</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-4xl">Assigned exams</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
           Review exam windows and open the live monitoring console for an exam.
         </p>
       </div>
@@ -84,41 +84,48 @@ export default function ProctorHome() {
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             {[
-              { label: 'Live now', value: liveCount, tone: 'OK' },
-              { label: 'Upcoming', value: upcomingCount, tone: 'INFO' },
-              { label: 'Completed', value: endedCount, tone: 'NEUTRAL' },
+              { label: 'Live now', value: liveCount, tone: 'OK', detail: 'Ready for monitoring' },
+              { label: 'Upcoming', value: upcomingCount, tone: 'INFO', detail: 'Scheduled sessions' },
+              { label: 'Completed', value: endedCount, tone: 'NEUTRAL', detail: 'Past exam windows' },
             ].map((stat) => (
-              <Card key={stat.label}>
+              <Card key={stat.label} className="relative overflow-hidden">
+                <span className={`absolute inset-y-0 left-0 w-1 ${stat.tone === 'OK' ? 'bg-ok' : stat.tone === 'INFO' ? 'bg-info' : 'bg-slate-500'}`} />
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm text-slate-300">{stat.label}</p>
+                  <p className="text-sm font-medium text-slate-200">{stat.label}</p>
                   <Badge tone={stat.tone}>{stat.label}</Badge>
                 </div>
-                <p className="mt-3 text-3xl font-semibold text-white">{stat.value}</p>
+                <p className="mt-3 text-3xl font-semibold tracking-tight text-white">{stat.value}</p>
+                <p className="mt-1 text-xs text-slate-400">{stat.detail}</p>
               </Card>
             ))}
           </div>
 
           {exams.length ? (
             <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-white">Your exam schedule</h2>
+                <span className="text-sm text-slate-400">{exams.length} total</span>
+              </div>
               {exams.map((exam) => {
                 const status = examStatus(exam);
                 const tone = status === 'Live' ? 'OK' : status === 'Upcoming' ? 'INFO' : 'NEUTRAL';
                 const examId = exam._id || exam.id;
 
                 return (
-                  <Card key={examId} className="p-5">
+                  <Card key={examId} className="p-5 hover:border-slate-500/80">
                     <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-3">
-                          <h2 className="text-xl font-semibold text-white">{exam.title}</h2>
+                          <h3 className="text-xl font-semibold text-white">{exam.title}</h3>
                           <Badge tone={tone}>{status}</Badge>
                         </div>
                         <p className="text-sm text-slate-300">
+                          <span className="mr-2 text-slate-500">Schedule</span>
                           {formatDate(exam.startAt)} <span className="text-slate-500">to</span>{' '}
                           {formatDate(exam.endAt)}
                         </p>
                         <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs uppercase tracking-wide text-slate-400">
-                          <span>{exam.candidateCount ?? 0} candidates</span>
+                          <span>{exam.candidateCount ?? 0} candidates assigned</span>
                           <span>{exam.sensitivity || 'MEDIUM'} sensitivity</span>
                         </div>
                       </div>

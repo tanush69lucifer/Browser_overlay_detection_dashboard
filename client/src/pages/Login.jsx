@@ -153,6 +153,19 @@ export default function Login() {
                 onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
               />
 
+              <div className="-mt-2 flex justify-end">
+                <button
+                  type="button"
+                  className="text-sm text-primary hover:text-indigo-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                  onClick={() => {
+                    setResetEmail(form.email.trim());
+                    setForgotMode(true);
+                  }}
+                >
+                  Forgot password?
+                </button>
+              </div>
+
               <Button type="submit" className="w-full" loading={submitting}>
                 {submitting ? 'Signing in...' : 'Login'}
               </Button>
