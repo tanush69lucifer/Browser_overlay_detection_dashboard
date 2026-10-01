@@ -72,6 +72,16 @@ Run `cd server && npm run loadtest` with the API running for the health endpoint
 
 ## Stack
 
+## Team
+
+| Name | GitHub | Primary responsibility |
+|------|--------|------------------------|
+| Tanush Bhardwaj | tanush69lucifer | Server core, auth, exams, sessions, realtime, deploy |
+| Sohil Malik | Sohil417 | Scoring engine, integrity APIs, load test |
+| Sumit Chaudhary | sumit-chaudhary11 | Client detector, demo overlay extension |
+| Tanisha Tayal | tanishatayal06 | UI kit, candidate and admin pages |
+| Tanya Goyal | Tanyagoyal14 | Proctor live console, drill-down, reports |
+
 - Client: React, Vite, Tailwind CSS, React Router, Zustand, Axios, Socket.IO client
 - Server: Node.js, Express, MongoDB/Mongoose, Socket.IO, optional Redis
 - Authentication and validation: JWT, bcrypt, Zod
