@@ -1,5 +1,30 @@
 const SESSION_KEY = 'activeExamSession';
 const lastReportedBySession = new Map();
+const APP_HOST_MATCHES = ['http://localhost/*', 'http://127.0.0.1/*'];
+
+async function injectIntoOpenExamTabs() {
+  const tabs = await chrome.tabs.query({ url: APP_HOST_MATCHES });
+  await Promise.all(tabs
+    .filter((tab) => tab.id && tab.url && new URL(tab.url).pathname.startsWith('/candidate/exam/'))
+    .map(async (tab) => {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js'],
+        });
+      } catch (error) {
+        console.warn('[Overlay Proctor] Could not connect to an already-open exam tab:', error.message);
+      }
+    }));
+}
+
+chrome.runtime.onInstalled.addListener(({ reason }) => {
+  if (reason === 'install' || reason === 'update') {
+    void injectIntoOpenExamTabs().catch((error) => {
+      console.error('[Overlay Proctor] Unable to connect existing exam tabs:', error.message);
+    });
+  }
+});
 
 async function readSession() {
   const stored = await chrome.storage.session.get(SESSION_KEY);
@@ -63,6 +88,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }).then(() => {
       lastReportedBySession.delete(message.sessionId);
       sendResponse({ ok: true, connected: true });
+      void reportActiveTab(sender.tab.id);
     }).catch(() => sendResponse({ ok: false, error: 'Unable to start tab monitoring' }));
     return true;
   }
@@ -84,6 +110,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.tabs.onActivated.addListener(({ tabId }) => {
   void reportActiveTab(tabId);
+});
+
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) return;
+  chrome.tabs.query({ active: true, windowId }).then((tabs) => {
+    if (tabs[0]?.id) void reportActiveTab(tabs[0].id);
+  }).catch((error) => {
+    console.warn('[Overlay Proctor] Could not read the focused window tab:', error.message);
+  });
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {

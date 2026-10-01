@@ -2,6 +2,11 @@ const PAGE_SOURCE = 'overlay-proctor-page';
 const EXTENSION_SOURCE = 'overlay-proctor-extension';
 const SESSION_ID_PATTERN = /^[a-f\d]{24}$/i;
 
+if (globalThis.__overlayProctorCompanionInjected) {
+  // Avoid registering duplicate handlers if the extension injects into an open exam tab.
+} else {
+globalThis.__overlayProctorCompanionInjected = true;
+
 function notifyPage(type, payload = {}) {
   window.postMessage(
     { source: EXTENSION_SOURCE, type, ...payload },
@@ -50,3 +55,4 @@ chrome.runtime.onMessage.addListener((message) => {
 });
 
 notifyPage('EXTENSION_READY');
+}
