@@ -1,121 +1,112 @@
-import api from '../api/client';
+import api from '../api/client.js';
+import { DETECTOR_CONFIG } from './config.js';
 
-/**
- * Signal Batcher and Dispatcher.
- * Rules per SPEC Section 6 & 8:
- * - Emits `signals:batch` { sessionId, signals[] }
- * - Max 50 signals per batch
- * - Dispatched every 2.5 seconds
- * - Dispatched IMMEDIATELY on any HIGH signal
- * - Falls back to HTTP POST /sessions/:id/signals if socket is offline
- */
-
-const FLUSH_INTERVAL_MS = 2500;
 const MAX_BATCH_SIZE = 50;
-const ACK_TIMEOUT_MS = 5000;
 
 export function createBatcher({ socket, sessionId }) {
   const storageKey = `proctor:signalQueue:${sessionId}`;
   let queue = [];
+  let timer = null;
+  let stopped = false;
+  let flushPromise = null;
+
   try {
     const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
-    if (Array.isArray(stored)) queue = stored;
+    if (Array.isArray(stored)) queue = stored.slice(-DETECTOR_CONFIG.maxSignalBuffer);
   } catch (error) {
     console.warn('[Detector] Unable to restore queued signals:', error);
   }
-  let timer = null;
-  let isStopped = false;
-  let flushPromise = null;
 
   const persist = () => {
     try {
-      localStorage.setItem(storageKey, JSON.stringify(queue));
+      if (queue.length) localStorage.setItem(storageKey, JSON.stringify(queue));
+      else localStorage.removeItem(storageKey);
     } catch (error) {
       console.warn('[Detector] Unable to persist queued signals:', error);
     }
   };
 
-  const flush = async (force = false) => {
-    if (flushPromise) return flushPromise;
-    if (queue.length === 0) return true;
-    if (isStopped && !force) return false;
+  const sendSocket = payload => new Promise(resolve => {
+    if (!socket?.connected) return resolve(false);
+    let settled = false;
+    const timeout = setTimeout(() => finish(false), DETECTOR_CONFIG.ackTimeoutMs);
+    const finish = ok => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(Boolean(ok));
+    };
+    try {
+      socket.emit('signals:batch', payload, ack => finish(ack?.ok === true));
+    } catch (error) {
+      console.warn('[Detector] Socket emission failed:', error);
+      finish(false);
+    }
+  });
 
-    let delivered = false;
-    flushPromise = (async () => {
-      const signalsToSend = queue.slice(0, MAX_BATCH_SIZE);
-      const payload = { sessionId, signals: signalsToSend };
+  const flush = async (forceHttp = false) => {
+    if (flushPromise) {
+      await flushPromise;
+      if (queue.length && (forceHttp || !stopped)) return flush(forceHttp);
+      return queue.length === 0;
+    }
+    if (!queue.length) return true;
+    if (stopped && !forceHttp) return false;
 
-      if (socket?.connected) {
-        delivered = await new Promise((resolve) => {
-          const timeout = setTimeout(() => resolve(false), ACK_TIMEOUT_MS);
+    const current = (async () => {
+      while (queue.length) {
+        const batch = queue.slice(0, MAX_BATCH_SIZE);
+        let delivered = forceHttp ? false : await sendSocket({ sessionId, signals: batch });
+        if (!delivered) {
           try {
-            socket.emit('signals:batch', payload, (ack) => {
-              clearTimeout(timeout);
-              resolve(Boolean(ack?.ok));
-            });
+            await api.post(`/sessions/${sessionId}/signals`, { signals: batch });
+            delivered = true;
           } catch (error) {
-            clearTimeout(timeout);
-            console.warn('[Detector] Socket emission failed:', error);
-            resolve(false);
+            console.warn('[Detector] Signal fallback failed; keeping signals queued:', error?.message || error);
+            persist();
+            return false;
           }
-        });
-      }
-
-      if (!delivered) {
-        try {
-          await api.post(`/sessions/${sessionId}/signals`, { signals: signalsToSend });
-          delivered = true;
-        } catch (error) {
-          console.warn('[Detector] HTTP signal fallback failed; signals remain queued:', error);
+        }
+        if (delivered) {
+          queue.splice(0, batch.length);
+          persist();
         }
       }
-
-      if (delivered) {
-        queue.splice(0, signalsToSend.length);
-        persist();
-      } else {
-        persist();
-      }
-      return delivered;
+      return true;
     })();
-
-    let deliveredBatch = false;
+    flushPromise = current;
     try {
-      deliveredBatch = await flushPromise;
+      return await current;
     } finally {
-      flushPromise = null;
+      if (flushPromise === current) flushPromise = null;
     }
-
-    if (deliveredBatch && queue.length > 0 && (!isStopped || force)) return flush(force);
-    return queue.length === 0;
   };
 
-  const enqueue = (signal) => {
-    if (isStopped || !signal) return;
+  const enqueue = signal => {
+    if (stopped || !signal) return;
+    if (queue.length >= DETECTOR_CONFIG.maxSignalBuffer) {
+      const lowIndex = queue.findIndex(item => item.severity === 'LOW');
+      if (lowIndex >= 0) queue.splice(lowIndex, 1);
+      else queue.shift();
+    }
     const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     queue.push({ ...signal, id });
     persist();
-    if (signal.severity === 'HIGH' || queue.length >= MAX_BATCH_SIZE) {
-      void flush();
-    }
+    if (signal.severity === 'HIGH' || queue.length >= MAX_BATCH_SIZE) void flush();
   };
 
-  // Periodic flush timer (2.5s)
-  timer = setInterval(flush, FLUSH_INTERVAL_MS);
-
-  const stop = () => {
-    if (timer) {
-      clearInterval(timer);
-      timer = null;
-    }
-    isStopped = true;
-    persist();
-    return flush(true);
-  };
-
+  timer = setInterval(() => void flush(), DETECTOR_CONFIG.batchFlushMs);
   return {
     enqueue,
-    flush,
-    stop,
+    flush: () => flush(),
+    stop: async () => {
+      if (stopped) return queue.length === 0;
+      stopped = true;
+      if (timer) clearInterval(timer);
+      timer = null;
+      persist();
+      // Start the HTTP request before the caller disconnects its session socket.
+      return flush(true);
+    },
   };
 }

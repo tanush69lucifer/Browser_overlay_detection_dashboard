@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import AppShell from './components/layout/AppShell';
 import { useAuth } from './store/auth';
 import Login from './pages/Login';
+import ResetPassword from './pages/ResetPassword';
 import MyExams from './pages/candidate/MyExams';
 import ExamPage from './pages/candidate/ExamPage';
 import ProctorHome from './pages/proctor/ProctorHome';
@@ -29,6 +30,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/" element={<RoleRedirect />} />
 
       <Route element={<ProtectedRoute roles={['CANDIDATE']} />}>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { getSession, getSessionFlags, reviewFlag } from '../../api/proctor';
+import { getSession, getSessionFlags, getSessionSignals, reviewFlag } from '../../api/proctor';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
@@ -50,6 +50,7 @@ export default function SessionDetail() {
   const navigate = useNavigate();
   const [session, setSession] = useState(null);
   const [flags, setFlags] = useState([]);
+  const [signals, setSignals] = useState([]);
   const [drafts, setDrafts] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -59,14 +60,16 @@ export default function SessionDetail() {
     try {
       setLoading(true);
       setError('');
-      const [sessionPayload, flagsPayload] = await Promise.all([
+      const [sessionPayload, flagsPayload, signalsPayload] = await Promise.all([
         getSession(sessionId),
         getSessionFlags(sessionId),
+        getSessionSignals(sessionId),
       ]);
       const sessionData = sessionPayload?.session || sessionPayload;
       const flagList = Array.isArray(flagsPayload?.items) ? flagsPayload.items : [];
       setSession(sessionData);
       setFlags(flagList);
+      setSignals(Array.isArray(signalsPayload?.items) ? signalsPayload.items : []);
       setDrafts(Object.fromEntries(flagList.map((flag) => [
         flag._id,
         { note: flag.note || '', verdict: flag.verdict || '' },
@@ -135,6 +138,25 @@ export default function SessionDetail() {
           <div><p className="text-slate-400">Last heartbeat</p><p className="mt-1 text-white">{formatDate(session.lastHeartbeat)}</p></div>
         </div>
       </Card>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold text-white">Detector signal history</h2>
+          <p className="mt-1 text-sm text-slate-400">Latest accepted, privacy-filtered detector events for this candidate.</p>
+        </div>
+        {signals.length ? signals.map((signal) => (
+          <Card key={signal._id} className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-white">{String(signal.code).replaceAll('_', ' ')}</h3>
+              <p className="mt-1 text-sm text-slate-300">{signalDescription(signal)}</p>
+              <p className="mt-1 text-xs text-slate-400">{formatDate(signal.occurredAt)}</p>
+            </div>
+            <Badge tone={severityTone(signal.severity)}>{signal.severity}</Badge>
+          </Card>
+        )) : (
+          <EmptyState title="No detector signals yet" hint="Accepted detector events from this session will appear here." />
+        )}
+      </section>
 
       <section className="space-y-4">
         <div>
@@ -246,4 +268,22 @@ export default function SessionDetail() {
       </section>
     </div>
   );
+}
+
+function signalDescription(signal) {
+  if (signal.code === 'EXTENSION_RESOURCE_PROBE') return `Configured extension resource reachable: ${signal.meta?.tool || 'extension'}. This is a best-effort presence clue, not proof of behavior.`;
+  const meta = signal.meta || {};
+  if (signal.code === 'KNOWN_FINGERPRINT') return [meta.name, meta.tool].filter(Boolean).join(' · ') || 'Known overlay/extension fingerprint matched';
+  if (signal.code === 'FIXED_HIGH_Z_NODE') return `Large positioned element · z-index ${meta.zIndex ?? 'unknown'} · ${Math.round(Number(meta.areaRatio || 0) * 100)}% viewport`;
+  if (signal.code === 'EXTENSION_IFRAME') return `Extension iframe · ${meta.extensionOrigin || 'unknown origin'}`;
+  if (signal.code === 'FOREIGN_SHADOW_ROOT') return `Unexpected shadow/isolated DOM · ${meta.type || 'shadow root'}`;
+  if (signal.code === 'DOM_NODE_DELTA') return `Unexpected page nodes · ${meta.baseline ?? '?'} → ${meta.current ?? '?'}`;
+  if (signal.code === 'BROWSER_TAB_SWITCH') return [meta.title, meta.url].filter(Boolean).join(' · ') || 'Browser tab changed';
+  if (signal.code === 'TAB_HIDDEN') return 'Exam tab became hidden';
+  if (signal.code === 'TAB_VISIBLE') return 'Exam tab became visible';
+  if (signal.code === 'WINDOW_BLUR') return 'Exam window lost focus';
+  if (signal.code === 'PASTE_EVENT') return 'Paste detected; clipboard content was not read';
+  if (signal.code === 'FULLSCREEN_EXIT') return 'Candidate left fullscreen';
+  if (signal.code === 'DEVTOOLS_OPEN') return 'Possible DevTools viewport-size heuristic';
+  return signal.code;
 }

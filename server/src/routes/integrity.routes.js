@@ -30,6 +30,22 @@ router.get(
   flagsController.getSessionFlags
 );
 
+router.get(
+  '/sessions/:id/signals',
+  requireAuth,
+  requireRole('PROCTOR', 'ADMIN'),
+  validate(idParamSchema, 'params'),
+  flagsController.getSessionSignals
+);
+
+router.get(
+  '/exams/:id/signals',
+  requireAuth,
+  requireRole('PROCTOR', 'ADMIN'),
+  validate(idParamSchema, 'params'),
+  flagsController.getExamSignals
+);
+
 router.patch(
   '/flags/:id',
   requireAuth,

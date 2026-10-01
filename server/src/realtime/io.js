@@ -145,7 +145,7 @@ function initSocket(httpServer) {
     socket.on('proctor:join', async (payload = {}, ack) => {
       const reply = asAck(ack);
       try {
-        if (user.role !== 'PROCTOR') return reply({ ok: false, error: 'FORBIDDEN' });
+        if (!['PROCTOR', 'ADMIN'].includes(user.role)) return reply({ ok: false, error: 'FORBIDDEN' });
         const exam = await Exam.findById(payload.examId).select('proctorIds').lean();
         if (!exam) return reply({ ok: false, error: 'NOT_FOUND' });
         if (user.role === 'PROCTOR' && !exam.proctorIds.some((id) => String(id) === user.id)) {

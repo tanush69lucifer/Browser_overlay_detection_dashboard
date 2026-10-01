@@ -26,6 +26,12 @@
       "run_at": "document_end"
     }
   ],
+  "web_accessible_resources": [
+    {
+      "resources": ["probe.svg"],
+      "matches": ["http://localhost/*", "http://127.0.0.1/*"]
+    }
+  ],
   "commands": {
     "toggle-overlay": {
       "suggested_key": {

@@ -4,6 +4,7 @@
 const mongoose = require('mongoose');
 const Session = require('../models/Session');
 const Exam = require('../models/Exam');
+const DetectorSignal = require('../models/DetectorSignal');
 const counters = require('../redis/counters');
 const signalWindow = require('../redis/signalWindow');
 const { shouldCount } = require('./debounce');
@@ -93,6 +94,7 @@ async function processBatch({ sessionId, examId, candidate, signals = [] }) {
   }
 
   const countedSignals = [];
+  const acceptedSignals = [];
 
   // Step 1: Validate, sanitize, debounce, and assign weight/severity
   for (const sig of signals) {
@@ -118,13 +120,48 @@ async function processBatch({ sessionId, examId, candidate, signals = [] }) {
       const fp = await configCache.getFingerprintByTool(toolName);
       const selectedForExam = !exam.fingerprintIds?.length
         || exam.fingerprintIds.some((id) => String(id) === String(fp?._id));
-      if (!fp || !selectedForExam) continue;
-      if (fp.allowed) {
+      // Built-in client fingerprints (including Cluely DOM signatures) may
+      // have no Mongo document. Keep their standard high-risk score. A
+      // configured fingerprint omitted from this exam is still sent to the
+      // live proctor feed above, but does not affect the score.
+      if (fp && !selectedForExam) {
+        acceptedSignals.push({
+          code: sig.code,
+          severity: ['LOW', 'MED', 'HIGH'].includes(sig.severity) ? sig.severity : severity,
+          t,
+          key: cleanKey,
+          meta: cleanMeta,
+        });
+        continue;
+      }
+      if (fp?.allowed) {
         weight = 1;
         severity = 'LOW';
-      } else {
+      } else if (fp) {
         weight = Number(fp.weight) || 10;
         severity = fp.severity || 'HIGH';
+      }
+    } else if (sig.code === 'EXTENSION_RESOURCE_PROBE') {
+      const configuredTool = cleanMeta.tool;
+      const fp = await configCache.getFingerprintByTool(configuredTool);
+      const selectedForExam = !exam.fingerprintIds?.length
+        || exam.fingerprintIds.some((id) => String(id) === String(fp?._id));
+      if (fp && (!selectedForExam || fp.matcherType !== 'EXTENSION_RESOURCE')) {
+        acceptedSignals.push({
+          code: sig.code,
+          severity: ['LOW', 'MED', 'HIGH'].includes(sig.severity) ? sig.severity : DEFAULT_SEVERITY[sig.code],
+          t,
+          key: cleanKey,
+          meta: cleanMeta,
+        });
+        continue;
+      }
+      if (fp?.allowed) {
+        weight = 1;
+        severity = 'LOW';
+      } else if (fp) {
+        weight = Number(fp.weight) || DEFAULT_WEIGHTS[sig.code];
+        severity = fp.severity || DEFAULT_SEVERITY[sig.code];
       }
     } else if (sig.code === 'FIXED_HIGH_Z_NODE') {
       const zIndex = Number(cleanMeta.zIndex);
@@ -135,6 +172,16 @@ async function processBatch({ sessionId, examId, candidate, signals = [] }) {
       weight = isPersistentLargeOverlay ? 10 : DEFAULT_WEIGHTS.FIXED_HIGH_Z_NODE;
       severity = isPersistentLargeOverlay ? 'HIGH' : DEFAULT_SEVERITY.FIXED_HIGH_Z_NODE;
     }
+
+    // Keep a sanitized copy for the proctor feed. It remains visible even
+    // when it does not accumulate enough score to raise a flag.
+    acceptedSignals.push({
+      code: sig.code,
+      severity,
+      t,
+      key: cleanKey,
+      meta: cleanMeta,
+    });
 
     countedSignals.push({
       code: sig.code,
@@ -147,7 +194,32 @@ async function processBatch({ sessionId, examId, candidate, signals = [] }) {
   }
 
   if (countedSignals.length === 0) {
-    return { flags: [], signals: [] };
+    const candidateId = candidate?.id || candidate?._id || candidate;
+    if (acceptedSignals.length && candidateId) {
+      await DetectorSignal.insertMany(acceptedSignals.map((signal) => ({
+        sessionId,
+        examId,
+        candidateId,
+        code: signal.code,
+        severity: signal.severity,
+        occurredAt: new Date(signal.t),
+        meta: signal.meta,
+      })), { ordered: false });
+    }
+    return { flags: [], signals: acceptedSignals };
+  }
+
+  const candidateId = candidate?.id || candidate?._id || candidate;
+  if (acceptedSignals.length && candidateId) {
+    await DetectorSignal.insertMany(acceptedSignals.map((signal) => ({
+      sessionId,
+      examId,
+      candidateId,
+      code: signal.code,
+      severity: signal.severity,
+      occurredAt: new Date(signal.t),
+      meta: signal.meta,
+    })), { ordered: false });
   }
 
   // Step 2: Load exam thresholds
@@ -184,7 +256,7 @@ async function processBatch({ sessionId, examId, candidate, signals = [] }) {
   }
 
   if (!flagRaised) {
-    return { flags: [], signals: countedSignals };
+    return { flags: [], signals: acceptedSignals };
   }
 
   if (clearWindowNeeded) {
@@ -200,7 +272,6 @@ async function processBatch({ sessionId, examId, candidate, signals = [] }) {
 
   // Step 6: Pre-generate _id, enqueue to flagWriter buffer, mark counters, return flag
   const flagId = new mongoose.Types.ObjectId();
-  const candidateId = candidate?.id || candidate?._id || candidate;
   const candidateName = candidate?.name || 'Candidate';
 
   const evidence = {
@@ -249,7 +320,7 @@ async function processBatch({ sessionId, examId, candidate, signals = [] }) {
     evidence,
   };
 
-  return { flags: [resultFlag], signals: countedSignals };
+  return { flags: [resultFlag], signals: acceptedSignals };
 }
 
 module.exports = { processBatch };

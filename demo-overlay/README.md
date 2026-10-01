@@ -26,3 +26,26 @@ Used during proctoring demonstrations and test evaluation to show real-time dete
 
 This is a controlled detector-test helper, not part of the production exam flow.
 Use it only in a test exam/session.
+
+## Test extension-resource probing
+
+The extension exposes only `probe.svg` as a web-accessible image. This is a
+test fixture for the detector's best-effort resource probe; it does not expose
+the extension's scripts or private data.
+
+1. Reload this unpacked extension from `chrome://extensions` after changing its
+   manifest, then copy its 32-character ID.
+2. Open `http://127.0.0.1:5173/detector-test.html` and paste that ID into the
+   **Extension resource probe** box. Leave the path as `probe.svg` and run it.
+3. Expected positive result: `DETECTED` and an `EXTENSION_RESOURCE_PROBE`
+   row in the signal stream.
+4. Try a valid-looking but uninstalled ID, or change the path to `missing.svg`.
+   Expected result: `NOT_OBSERVED`, with no suspicious signal generated.
+5. Try an invalid ID such as `not-an-extension`. Expected result:
+   `INVALID_INPUT`, explaining the expected ID format.
+
+Interpretation: only a successful load proves that this specific configured
+resource is reachable from the page. A failed, blocked, timed-out, or absent
+resource is inconclusive; many extensions expose no web-accessible resources.
+This probe is Chrome/Edge-specific, is not a universal extension inventory,
+and does not identify an extension's behavior or prove cheating.

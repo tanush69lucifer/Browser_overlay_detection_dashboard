@@ -2,7 +2,7 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'r
 import { useNavigate, useParams } from 'react-router-dom';
 import { VirtuosoGrid } from 'react-virtuoso';
 import { getExam } from '../../api/exams';
-import { getExamSessions } from '../../api/proctor';
+import { getExamSessions, getExamSignals } from '../../api/proctor';
 import { createSocket } from '../../realtime/socket';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -46,6 +46,9 @@ function formatTime(value) {
 }
 
 function signalDescription(item) {
+  if (item.code === 'EXTENSION_RESOURCE_PROBE') {
+    return `Configured extension resource is reachable (${item.meta?.tool || 'extension'}). A positive resource check does not prove what the extension is doing.`;
+  }
   const meta = item.meta || {};
   if (item.code === 'KNOWN_FINGERPRINT') {
     return [meta.name, meta.tool].filter(Boolean).join(' · ') || 'Configured fingerprint matched';
@@ -119,10 +122,11 @@ export default function Console() {
     try {
       setLoading(true);
       setError('');
-      const [examPayload] = await Promise.all([getExam(examId), loadSessions()]);
+      const [examPayload, signalPayload] = await Promise.all([getExam(examId), getExamSignals(examId), loadSessions()]);
       const examData = examPayload?.exam || examPayload;
       if (!examData) throw new Error('Exam details were not returned');
       setExam(examData);
+      setFeed((signalPayload?.items || []).map((item) => ({ ...item, id: item._id, kind: 'SIGNAL' })));
     } catch (err) {
       setError(err?.message || 'Unable to load the live exam console');
     } finally {
@@ -398,24 +402,19 @@ export default function Console() {
                       {item.kind === 'FLAG' ? flagTitle(item) : signalLabel(item.code)}
                     </p>
                     <p className="mt-1 text-xs text-slate-400">
-                      {item.candidate?.name || 'Candidate'} · {formatTime(item.kind === 'FLAG' ? flagEventTime(item) : item.t || item.raisedAt)}
+                      {item.candidate?.name || 'Candidate'} · {formatTime(item.t || item.raisedAt)}
                     </p>
                   </div>
                   <Badge tone={severityTone(item.severity)}>{item.severity || 'LOW'}</Badge>
                 </div>
                 {item.kind === 'FLAG' ? (
-                  <>
-                    {flagTool(item) ? (
-                      <p className="mt-2 text-sm text-slate-300">Detected tool: <span className="font-medium text-white">{flagTool(item)}</span></p>
-                    ) : null}
-                    <Button
-                      variant="ghost"
-                      className="mt-3 w-full"
-                      onClick={() => navigate(`/proctor/session/${item.sessionId}`)}
-                    >
-                      View Evidence
-                    </Button>
-                  </>
+                  <Button
+                    variant="ghost"
+                    className="mt-3 w-full"
+                    onClick={() => navigate(`/proctor/session/${item.sessionId}`)}
+                  >
+                    Review candidate
+                  </Button>
                 ) : (
                   <p className="mt-2 text-xs text-slate-400">{signalDescription(item)}</p>
                 )}

@@ -1,8 +1,79 @@
-# Overlay Proctor: PS 05 | Team <Team Name>
+# Overlay Proctor: PS 05
 
-Live exam-integrity dashboard that detects configured browser overlay indicators during a monitored test and sends flags to proctors for review. The project targets 500 concurrent candidates, but that scale claim is not a measured benchmark until the Socket.IO load test below has been run in the target environment.
+Online exam integrity dashboard with a browser-side detector, server scoring, and a proctor review console. Detector events are heuristic signals for human review, not proof of misconduct.
+
+## What it detects
+
+- Large fixed/absolute high-z-index page elements, including persistence escalation.
+- Built-in and exam-configured fingerprints (including best-effort Cluely DOM signatures), extension iframes, and open Shadow DOM.
+- Unexpected DOM growth, window blur, tab visibility, paste occurrence, fullscreen exit, and a DevTools viewport heuristic.
+- Optional browser companion active-tab changes where the companion extension is installed.
+
+The browser cannot identify an overlay that exists only in a separate desktop window or browser chrome. It does not capture screen/camera, keystrokes, clipboard contents, or pasted text. See [DETECTION.md](DETECTION.md) for signal details and limits.
+
+## Requirements
+
+- Node.js and npm
+- MongoDB (local or Atlas)
+- Redis is optional for single-server development
+
+## Run locally (Windows PowerShell)
+
+Use two terminals from the repository root.
+
+### Backend
+
+```powershell
+cd server
+npm ci
+Copy-Item .env.example .env
+notepad .env
+npm run dev
+```
+
+Set `MONGO_URI`, a private `JWT_SECRET`, and `CLIENT_URL` matching the client origin. Keep real credentials in `server/.env` and never commit them. The API and Socket.IO use port 5000 by default. Health check: [http://localhost:5000/health](http://localhost:5000/health).
+
+To enable Google login, create a **Web application** OAuth client in Google Cloud Console and add the local app origin (for example, `http://localhost:5173`) to its Authorized JavaScript origins. Put the same client ID in `GOOGLE_CLIENT_ID` in `server/.env` and `VITE_GOOGLE_CLIENT_ID` in `client/.env`, then restart both servers. The Google button stays disabled until these values are configured. Google sign-up creates candidate accounts; an existing account with a verified matching email is linked to that Google identity. See [Google Identity Services setup](https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid).
+
+### Client
+
+```powershell
+cd client
+npm ci
+Copy-Item .env.example .env
+npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173). Keep the host consistent (`localhost` vs `127.0.0.1`) with `CLIENT_URL`.
+
+## See detector events in the proctor dashboard
+
+1. Sign in with an account that exists in the configured database. This checkout does not contain a seed script or guarantee demo logins.
+2. Ensure the candidate is assigned to an exam and the proctor is assigned to that exam.
+3. Open the candidate exam page and start the monitored session.
+4. Open that exam in the Proctor Console. New accepted detector signals appear in the live feed with candidate name, signal reason, severity, and a link to that candidate's session. The latest saved detector signals also load after refresh; the session drill-down includes that candidate's signal history and scored flag timeline.
+5. Use `http://localhost:5173/detector-test.html` only as a local scanner test bench. Its mock socket events are local and are not sent to MongoDB or the proctor dashboard.
+
+The server scores signals according to exam sensitivity and fingerprint configuration. Signals that do not cross a flag threshold remain visible as detector events; they are not silently discarded from the proctor feed. Flag decisions remain available for human review.
+
+## Optional browser companion
+
+The ordinary exam page can observe focus and visibility but cannot read another tab's URL. The optional Manifest V3 companion in `browser-extension` uses the browser tabs permission to report the active HTTP(S) tab's origin/path and title during an active exam. It strips query strings and fragments and does not read page text, keystrokes, clipboard contents, screen, or browsing history.
+
+For local Chrome/Edge development, enable Developer mode on the browser extensions page, select **Load unpacked**, and choose this repository's `browser-extension` folder. Reload the candidate app and start an exam. Without the companion, ordinary focus/visibility signals still work, but other-tab URLs and titles are unavailable.
+
+## Project docs and load test
+
+- [Detection behavior and privacy](DETECTION.md)
+- [API and data contracts](SPEC.md)
+- [Demo extension](demo-overlay/README.md)
+
+Run `cd server && npm run loadtest` with the API running for the health endpoint check. Socket mode requires the documented disposable candidate tokens and sessions. Do not treat the target concurrency as measured until a real run completes.
+
+## Stack
 
 ## Team
+
 | Name | GitHub | Primary responsibility |
 |------|--------|------------------------|
 | Tanush Bhardwaj | tanush69lucifer | Server core, auth, exams, sessions, realtime, deploy |
@@ -11,89 +82,6 @@ Live exam-integrity dashboard that detects configured browser overlay indicators
 | Tanisha Tayal | tanishatayal06 | UI kit, candidate and admin pages |
 | Tanya Goyal | Tanyagoyal14 | Proctor live console, drill-down, reports |
 
-## Live Links
-- Frontend: TODO
-- Backend: TODO
-- Demo video: TODO
-
-## Tech Stack
-- Frontend: React 18, Vite, Tailwind CSS, Zustand, Axios, Socket.IO client
-- Backend: Node.js, Express, MongoDB/Mongoose, Socket.IO, Redis-compatible counters
-
-## Features
-- Candidate exam sessions with answers and live integrity detection
-- Proctor console with session status, flags, and reports
-- Admin proctor-account creation, exam assignment, fingerprint management, and scoring thresholds
-- Admin report summaries/exports without candidate drill-down or flag review controls
-- Configurable scoring thresholds and real-time Socket.IO events
-- CSV reports and browser Print / Save as PDF
-
-## Architecture
-The `client` Vite app communicates with the `server` REST API under `/api/v1`.
-Candidate detector events are sent over Socket.IO and scored by the server.
-MongoDB stores users, exams, sessions, flags, fingerprints, and thresholds.
-Redis is optional for single-instance local development and recommended for scaling.
-
-## Detection: what we can and cannot detect
-See [DETECTION.md](DETECTION.md).
-
-## Optional browser companion
-The ordinary exam page can observe focus and visibility changes but cannot read another
-tab's URL. The optional Manifest V3 companion in `browser-extension` uses the browser's
-`tabs` permission to report the active tab's HTTP(S) origin/path and title, plus whether
-the candidate returned to the exam tab. It removes URL query strings and fragments and
-does not read page text, keystrokes, clipboard contents, screen, or browser history.
-It runs only after the candidate starts a monitored session and stops when that session
-ends or its exam tab closes.
-
-For local development in Chrome or Edge:
-1. Open the browser's extensions page and enable Developer mode.
-2. Choose **Load unpacked** and select this repository's `browser-extension` folder.
-3. Reload `http://localhost:5175` and begin an exam; the candidate status should show
-   **Browser companion connected**.
-4. Switch to another HTTP(S) tab; the assigned Proctor's live feed should show
-   **Browser Tab Switch** with the destination title and sanitized URL.
-
-For deployment, add only the deployed candidate app origin to
-`browser-extension/manifest.json` under `content_scripts.matches`, then reload/repackage
-the extension. The candidate must install/enable it and accept the browser's requested
-permissions. Without it, the existing focus/visibility signals still work, but other-tab
-URLs and titles are unavailable.
-
-## Scale: load testing
-Run `cd server && npm run loadtest` while the API is running. The default `health` mode checks
-HTTP health endpoint throughput only; it does not simulate candidate sessions. For a real
-Socket.IO session/signal run, set `LOADTEST_MODE=socket`, `LOADTEST_CLIENTS`, and comma-separated
-`LOADTEST_TOKENS` and `LOADTEST_SESSION_IDS` for that many unique candidate JWTs and active
-sessions within their exam windows. It connects all clients concurrently, joins each session,
-sends one low-severity test signal per candidate, and prints connection and acknowledgement
-latency percentiles. Use disposable test sessions: existing session score history can affect
-whether a signal creates a flag. `LOADTEST_MODE=signals` uses the authenticated HTTP fallback;
-`LOADTEST_FLAG_BURST=1` intentionally creates flags and must only target a disposable exam.
-Record the command, candidate count, environment, and actual output when claiming a scale result.
-No 500-session Socket.IO benchmark is claimed by this repository until that run has completed.
-
-## Local Setup
-1. `git clone https://github.com/tanush69lucifer/Browser_overlay_detection_dashboard.git && cd Browser_overlay_detection_dashboard`
-2. `cd server && npm install && cp .env.example .env` (fill values)
-3. `npm run seed && npm run dev`
-4. `cd ../client && npm install && cp .env.example .env && npm run dev`
-
-## Test Credentials
-| Role | Email | Password |
-|---|---|---|
-| Admin | admin@demo.com | Admin@123 |
-| Proctor | proctor@demo.com | Proctor@123 |
-| Candidate | candidate@demo.com | Candidate@123 |
-
-## API Documentation
-See the endpoint table in [SPEC.md](SPEC.md#5-rest-endpoints).
-
-## Known Limitations
-- MongoDB is required to run the API and seed demo data.
-- Redis is recommended for multi-instance deployments; local fallback is in-memory.
-- Browser overlay detection is heuristic and cannot inspect browser-protected content.
-- False-positive percentages require reviewed/cleared flags and a defined measurement period; the report's cleared-verdict share is not a validated false-positive rate.
-- Session replay is intentionally not implemented; the app stores integrity metadata, not screen recordings or keystrokes.
-- Replace the Live Links placeholders, attach an actual demo video, and add the required 10–20 authentic prompt-history entries and any team/contribution evidence before submission. The current `PROMPTS.md` has five contributor summaries, not a complete prompt history; do not present invented prompts as historical evidence.
-- Do not treat placeholder links or unrun load tests as completed evidence.
+- Client: React, Vite, Tailwind CSS, React Router, Zustand, Axios, Socket.IO client
+- Server: Node.js, Express, MongoDB/Mongoose, Socket.IO, optional Redis
+- Authentication and validation: JWT, bcrypt, Zod
