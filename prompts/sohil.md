@@ -9,3 +9,4 @@
 | 5 | Add debounce for persistent overlay signals with Redis SET NX EX | `scoring/debounce.js` with 60s/10s TTL |
 | 6 | Add buffered bulk flag writer flushing to Mongo every 2s | `scoring/flagWriter.js` with Flag.insertMany and Session bulkWrite |
 | 7 | Implement processBatch scoring into LOW/MED/HIGH flags per SPEC rules 1-7 | `scoring/score.js` with full signal processing pipeline |
+| 8 | Add session flag timeline and review endpoints with proctor/admin auth | `controllers/flags.controller.js` and flag routes |
