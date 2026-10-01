@@ -41,6 +41,7 @@ export default function ExamPage() {
   const [fingerprints, setFingerprints] = useState([]);
   const [remainingMs, setRemainingMs] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [startingExam, setStartingExam] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   const cleanupSession = () => {
@@ -143,20 +144,18 @@ export default function ExamPage() {
   };
 
   const startMonitoring = async () => {
-    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
-      try {
-        await document.documentElement.requestFullscreen();
-      } catch {
-        toast.error('Fullscreen is required to start the exam. Please try again.');
-        return;
-      }
-    }
-    if (!document.fullscreenElement) {
-      toast.error('Fullscreen is required to start the exam. Please try again.');
-      return;
-    }
+    if (startingExam) return;
+    setStartingExam(true);
 
     try {
+      if (!document.fullscreenElement) {
+        if (!document.documentElement.requestFullscreen) {
+          throw new Error('Fullscreen is not supported by this browser. Open the exam in Chrome or Edge.');
+        }
+        await document.documentElement.requestFullscreen();
+      }
+      if (!document.fullscreenElement) throw new Error('Allow fullscreen to start the exam.');
+
       const session = await startSession(examId, {
         userAgent: navigator.userAgent,
         screen: { w: window.innerWidth, h: window.innerHeight },
@@ -205,6 +204,8 @@ export default function ExamPage() {
       stopDetectorRef.current = stop;
     } catch (err) {
       toast.error(err?.message || 'Unable to start the monitored exam');
+    } finally {
+      setStartingExam(false);
     }
   };
 
@@ -284,6 +285,7 @@ export default function ExamPage() {
 
           <div className="flex justify-end">
             <Button
+              loading={startingExam}
               onClick={startMonitoring}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') event.preventDefault();
