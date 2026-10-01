@@ -1,126 +1,250 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Overlay detector test</title>
+  <title>Browser Overlay Detector Test Bench</title>
   <style>
-    :root { color-scheme: dark; font: 15px/1.5 system-ui, sans-serif; color: #e2e8f0; background: #0b1220; }
-    * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; }
-    main { width: min(850px, 100%); margin: 0 auto; padding: 38px 24px 80px; }
-    .exam { padding: 28px; border: 1px solid #334155; border-radius: 16px; background: #172235; }
-    .badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 999px; color: #bbf7d0; background: #14532d66; font-size: 13px; }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; }
-    h1 { margin: 18px 0 6px; font-size: clamp(24px, 4vw, 34px); }
-    h2 { margin: 26px 0 8px; font-size: 19px; }
-    p { color: #cbd5e1; }
-    label { display: block; margin: 18px 0 8px; font-weight: 600; }
-    textarea { width: 100%; min-height: 120px; resize: vertical; padding: 12px; border: 1px solid #475569; border-radius: 8px; color: inherit; background: #0f172a; }
-    .hint { color: #94a3b8; font-size: 13px; }
-
-    /* This test-page panel is our own UI, so the detector must ignore it. */
-    #flag-panel[data-proctor="1"] { position: fixed; z-index: 20; top: 16px; right: 16px; width: min(360px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding: 16px; border: 1px solid #334155; border-radius: 14px; background: #111c2e; box-shadow: 0 16px 50px #0008; }
-    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-    .panel-head strong { font-size: 16px; }
-    #count { min-width: 28px; padding: 2px 8px; border-radius: 999px; text-align: center; color: #cbd5e1; background: #334155; font-size: 12px; }
-    #empty { margin: 0; padding: 12px; border-radius: 9px; color: #94a3b8; background: #1e293b; font-size: 13px; }
-    #flags { display: grid; gap: 9px; }
-    .flag { padding: 11px 12px; border-left: 4px solid #64748b; border-radius: 8px; background: #1e293b; }
-    .flag.HIGH { border-color: #f87171; }
-    .flag.MED { border-color: #fbbf24; }
-    .flag.LOW { border-color: #60a5fa; }
-    .flag-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    .code { overflow-wrap: anywhere; font-size: 12px; font-weight: 750; letter-spacing: .02em; }
-    .severity { padding: 2px 7px; border-radius: 999px; color: #cbd5e1; background: #334155; font-size: 10px; font-weight: 700; }
-    .reason { margin: 6px 0 0; color: #dbe4f0; font-size: 13px; }
-    .time { margin-top: 6px; color: #94a3b8; font-size: 11px; }
-    @media (max-width: 700px) {
-      #flag-panel[data-proctor="1"] { top: auto; right: 10px; bottom: 10px; width: min(360px, calc(100vw - 20px)); max-height: 42vh; }
-      main { padding-top: 20px; }
+    body {
+      background: #0b0f17;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 24px;
     }
+    h1 { margin-top: 0; font-size: 20px; color: #fff; }
+    p { font-size: 13px; color: #94a3b8; }
+    .grid { display: grid; grid-template-columns: 320px 1fr; gap: 20px; margin-top: 20px; }
+    .card { background: #111827; border: 1px solid #1e293b; border-radius: 10px; padding: 16px; }
+    .btn {
+      display: block;
+      width: 100%;
+      background: #1e293b;
+      color: #f1f5f9;
+      border: 1px solid #334155;
+      padding: 9px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: #334155; }
+    .btn.danger { border-color: rgba(244, 63, 94, 0.4); color: #fda4af; }
+    .btn.danger:hover { background: rgba(244, 63, 94, 0.15); }
+    .btn.warn { border-color: rgba(245, 158, 11, 0.4); color: #fde68a; }
+    .btn.warn:hover { background: rgba(245, 158, 11, 0.15); }
+    .btn.clear { background: #4338ca; border-color: #6366f1; color: white; text-align: center; }
+    .btn.clear:hover { background: #4f46e5; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { text-align: left; padding: 8px; border-bottom: 1px solid #1e293b; color: #64748b; font-size: 11px; }
+    td { padding: 8px; border-bottom: 1px solid #162032; font-family: monospace; }
+    .badge { padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 10px; }
+    .badge-HIGH { background: rgba(244, 63, 94, 0.15); color: #f43f5e; border: 1px solid rgba(244, 63, 94, 0.3); }
+    .badge-MED { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-LOW { background: rgba(14, 165, 233, 0.15); color: #0ea5e9; border: 1px solid rgba(14, 165, 233, 0.3); }
+    #stats { display: flex; gap: 12px; margin-bottom: 16px; font-size: 12px; }
+    .stat-pill { background: #0b0f17; border: 1px solid #1e293b; padding: 6px 12px; border-radius: 6px; }
+    .stat-num { font-weight: bold; margin-left: 4px; }
   </style>
 </head>
 <body>
-  <main data-proctor="1">
-    <section class="exam" data-proctor="1">
-      <span class="badge"><span class="dot"></span>Integrity monitoring active</span>
-      <h1>Detector test page</h1>
-      <p>This is sample exam content. Detector signals will appear in the panel on the right.</p>
-      <h2>Sample question</h2>
-      <p>Explain how a browser reports visibility changes to a web page.</p>
-      <label for="answer">Your answer</label>
-      <textarea id="answer" placeholder="Type a sample answer here"></textarea>
-      <p class="hint">Try switching tabs, pasting 100+ characters, or loading the demo extension. A paste within 5 seconds of copying on this page is ignored.</p>
-    </section>
-  </main>
 
-  <aside id="flag-panel" data-proctor="1" aria-live="polite" aria-label="Detector flags">
-    <div class="panel-head"><strong>Detector flags</strong><span id="count">0</span></div>
-    <p id="empty">No flags yet. Waiting for detector signals…</p>
-    <div id="flags"></div>
-  </aside>
+  <!-- Candidate root marker per SPEC -->
+  <div id="root" data-proctor="1">
+    <h1>🛡️ Browser Overlay Detection Test Bench</h1>
+    <p>Simulate unauthorized extensions, high z-index overlays, focus loss, and shadow DOM injections to verify detector signals.</p>
 
+    <div id="stats">
+      <div class="stat-pill">Signals Captured: <span id="total-count" class="stat-num" style="color: #6366f1;">0</span></div>
+      <div class="stat-pill">HIGH: <span id="high-count" class="stat-num" style="color: #f43f5e;">0</span></div>
+      <div class="stat-pill">MED: <span id="med-count" class="stat-num" style="color: #f59e0b;">0</span></div>
+      <div class="stat-pill">LOW: <span id="low-count" class="stat-num" style="color: #0ea5e9;">0</span></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Controls Column -->
+    <div class="card">
+      <h3 style="font-size: 13px; margin-top: 0; color: #fff;">Simulate Attacks & Injections</h3>
+
+      <button class="btn danger" onclick="injectHighZOverlay()">🚨 1. Inject Fixed High Z-Index Overlay (MED)</button>
+      <button class="btn danger" onclick="injectExtensionIframe()">🔌 2. Inject chrome-extension:// Iframe (HIGH)</button>
+      <button class="btn warn" onclick="injectForeignShadowRoot()">👥 3. Inject Foreign Open ShadowRoot (MED)</button>
+      <button class="btn warn" onclick="injectHtmlDirectChild()">🌐 4. Append Child Directly to &lt;html&gt; (MED)</button>
+      <button class="btn danger" onclick="injectKnownFingerprint()">🎯 5. Inject Sider / Monica Selector (HIGH)</button>
+      <button class="btn" onclick="triggerLargePaste()">📋 6. Simulate Large Paste (&gt;100 chars) (LOW)</button>
+      <button class="btn" onclick="triggerWindowBlur()">👁️ 7. Trigger Window Blur Event (LOW)</button>
+      <button class="btn" onclick="triggerDevToolsGap()">🔍 8. Trigger DevTools Outer/Inner Gap (LOW)</button>
+
+      <div style="margin-top: 16px; border-top: 1px solid #1e293b; pt-3;">
+        <button class="btn clear" onclick="clearInjections()">🧹 Clean Injected Test Elements</button>
+      </div>
+    </div>
+
+    <!-- Live Signals Log Column -->
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="font-size: 13px; margin: 0; color: #fff;">Real-Time Signal Stream</h3>
+        <button onclick="clearLog()" style="background: none; border: none; color: #64748b; font-size: 11px; cursor: pointer;">Clear Table</button>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Severity</th>
+            <th>Signal Code</th>
+            <th>Debounce Key</th>
+            <th>Metadata</th>
+          </tr>
+        </thead>
+        <tbody id="signal-log">
+          <tr><td colspan="5" style="text-align: center; color: #475569; padding: 24px;">No signals detected yet. Click any test action on the left.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Load Detector Script as Module -->
   <script type="module">
-    import { startDetector } from '/src/detector/index.js';
+    import { startDetector } from './src/detector/index.js';
 
-    const flagList = document.querySelector('#flags');
-    const empty = document.querySelector('#empty');
-    const count = document.querySelector('#count');
-    let flagCount = 0;
-    const reasons = {
-      FIXED_HIGH_Z_NODE: signal => `A ${signal.meta?.tag || 'page element'} is fixed/absolute, has z-index ${signal.meta?.zIndex ?? '?'}, and covers ${signal.meta?.areaPct ?? '?'}% of the screen.`,
-      KNOWN_FINGERPRINT: signal => `Known ${signal.meta?.tool || 'extension'} footprint found (${signal.meta?.match || signal.meta?.matcherType || 'configured matcher'}). This is a best-effort match.`,
-      FOREIGN_SHADOW_ROOT: signal => `An open Shadow DOM root was found on a ${signal.meta?.tag || 'page element'}.`,
-      EXTENSION_IFRAME: signal => `An iframe uses the ${signal.meta?.scheme || 'browser-extension'} URL scheme.`,
-      DOM_NODE_DELTA: signal => `The ${signal.meta?.target || 'page'} gained ${signal.meta?.delta ?? '?'} top-level elements.`,
-      WINDOW_BLUR: () => 'The exam browser window lost focus. This is a supporting signal, not proof of misuse.',
-      TAB_HIDDEN: () => 'The exam tab became hidden. This is a supporting signal, not proof of misuse.',
-      LARGE_PASTE: signal => `${signal.meta?.length ?? '?'} characters were pasted from outside this page. The pasted text is not collected.`,
-      DEVTOOLS_OPEN: () => 'The window-size heuristic suggests DevTools may be open. This is not reliable proof.'
+    let total = 0, high = 0, med = 0, low = 0;
+
+    // Mock socket for testing signal receipt
+    const mockSocket = {
+      connected: true,
+      emit: (event, payload, ack) => {
+        if (event === 'signals:batch') {
+          payload.signals.forEach(logSignal);
+        } else if (event === 'heartbeat') {
+          console.log('[Test Bench] Heartbeat emitted:', payload);
+        }
+        if (ack) ack({ ok: true });
+      }
     };
 
-    function addFlag(signal) {
-      flagCount += 1;
-      count.textContent = String(flagCount);
-      empty.hidden = true;
+    // Initialize detector
+    window.stopDetector = startDetector({
+      socket: mockSocket,
+      sessionId: 'test-session-local',
+      fingerprints: []
+    });
 
-      const card = document.createElement('article');
-      card.className = `flag ${signal.severity || 'LOW'}`;
-      const header = document.createElement('div');
-      header.className = 'flag-top';
-      const code = document.createElement('span');
-      code.className = 'code';
-      code.textContent = signal.code || 'UNKNOWN_SIGNAL';
-      const severity = document.createElement('span');
-      severity.className = 'severity';
-      severity.textContent = signal.severity || 'LOW';
-      header.append(code, severity);
+    function logSignal(sig) {
+      const tbody = document.getElementById('signal-log');
+      if (total === 0) tbody.innerHTML = '';
 
-      const reason = document.createElement('p');
-      reason.className = 'reason';
-      reason.textContent = reasons[signal.code]?.(signal) || 'Integrity metadata was reported for proctor review.';
-      const time = document.createElement('div');
-      time.className = 'time';
-      time.textContent = new Date(signal.t || Date.now()).toLocaleTimeString();
-      card.append(header, reason, time);
-      flagList.prepend(card);
-      while (flagList.children.length > 30) flagList.lastElementChild.remove();
+      total++;
+      if (sig.severity === 'HIGH') high++;
+      else if (sig.severity === 'MED') med++;
+      else low++;
+
+      document.getElementById('total-count').textContent = total;
+      document.getElementById('high-count').textContent = high;
+      document.getElementById('med-count').textContent = med;
+      document.getElementById('low-count').textContent = low;
+
+      const tr = document.createElement('tr');
+      const timeStr = new Date(sig.t || Date.now()).toLocaleTimeString();
+      tr.innerHTML = `
+        <td style="color: #94a3b8;">${timeStr}</td>
+        <td><span class="badge badge-${sig.severity}">${sig.severity}</span></td>
+        <td style="color: #e2e8f0; font-weight: bold;">${sig.code}</td>
+        <td style="color: #818cf8;">${sig.key || '-'}</td>
+        <td style="color: #cbd5e1; font-size: 11px;">${JSON.stringify(sig.meta || {})}</td>
+      `;
+      tbody.prepend(tr);
     }
 
-    const socket = {
-      connected: true,
-      emit(event, payload, ack) {
-        console.log(event, payload);
-        if (event === 'signals:batch') payload.signals.forEach(addFlag);
-        ack?.({ ok: true });
-      },
-      on() {},
-      off() {}
+    // Expose helpers to window for button clicks
+    window.injectHighZOverlay = () => {
+      const overlay = document.createElement('div');
+      overlay.id = 'test-injected-overlay';
+      overlay.style.position = 'fixed';
+      overlay.style.top = '50px';
+      overlay.style.right = '50px';
+      overlay.style.width = '300px';
+      overlay.style.height = '400px';
+      overlay.style.zIndex = '2147483647';
+      overlay.style.background = 'rgba(15, 23, 42, 0.95)';
+      overlay.style.border = '2px solid #ef4444';
+      overlay.style.borderRadius = '8px';
+      overlay.style.padding = '16px';
+      overlay.innerHTML = '<strong style="color: #ef4444;">[Simulated Injected Overlay]</strong><p style="font-size: 11px;">Always-on-top AI assistant helper layer</p>';
+      document.body.appendChild(overlay);
     };
 
-    const detector = startDetector({ socket, sessionId: 'test', fingerprints: [] });
-    window.addEventListener('pagehide', () => detector.stop(), { once: true });
+    window.injectExtensionIframe = () => {
+      const iframe = document.createElement('iframe');
+      iframe.id = 'test-extension-iframe';
+      iframe.src = 'chrome-extension://nkbihfbeogaeaoehlefnkodbefgpgknn/popup.html';
+      iframe.style.width = '200px';
+      iframe.style.height = '150px';
+      iframe.style.position = 'fixed';
+      iframe.style.bottom = '10px';
+      iframe.style.right = '10px';
+      document.body.appendChild(iframe);
+    };
+
+    window.injectForeignShadowRoot = () => {
+      const host = document.createElement('div');
+      host.id = 'test-shadow-host';
+      const shadow = host.attachShadow({ mode: 'open' });
+      shadow.innerHTML = '<div>Shadow AI Floating Assistant</div>';
+      document.body.appendChild(host);
+    };
+
+    window.injectHtmlDirectChild = () => {
+      const child = document.createElement('div');
+      child.id = 'test-html-direct-child';
+      child.style.display = 'none';
+      document.documentElement.appendChild(child);
+    };
+
+    window.injectKnownFingerprint = () => {
+      const siderNode = document.createElement('div');
+      siderNode.id = 'sider-sidebar-root';
+      siderNode.innerHTML = '<span>Simulated Sider Assistant Root</span>';
+      document.body.appendChild(siderNode);
+    };
+
+    window.triggerLargePaste = () => {
+      const pasteEvent = new ClipboardEvent('paste', {
+        clipboardData: new DataTransfer(),
+        bubbles: true,
+        cancelable: true
+      });
+      pasteEvent.clipboardData.setData('text/plain', 'A'.repeat(250));
+      window.dispatchEvent(pasteEvent);
+    };
+
+    window.triggerWindowBlur = () => {
+      window.dispatchEvent(new Event('blur'));
+    };
+
+    window.triggerDevToolsGap = () => {
+      window.dispatchEvent(new Event('resize'));
+    };
+
+    window.clearInjections = () => {
+      ['test-injected-overlay', 'test-extension-iframe', 'test-shadow-host', 'test-html-direct-child', 'sider-sidebar-root'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+      });
+    };
+
+    window.clearLog = () => {
+      document.getElementById('signal-log').innerHTML = '<tr><td colspan="5" style="text-align: center; color: #475569; padding: 24px;">Log cleared.</td></tr>';
+      total = 0; high = 0; med = 0; low = 0;
+      document.getElementById('total-count').textContent = '0';
+      document.getElementById('high-count').textContent = '0';
+      document.getElementById('med-count').textContent = '0';
+      document.getElementById('low-count').textContent = '0';
+    };
   </script>
 </body>
 </html>

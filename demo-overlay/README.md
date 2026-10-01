@@ -1,14 +1,22 @@
-# Demo overlay extension
+# Demo Overlay Extension (Alt+O Helper)
 
-This Manifest V3 extension adds a synthetic assistant panel to a page. It is only for controlled detector testing; it does not read page text or send data anywhere.
+A Manifest V3 extension simulating an unauthorized floating AI assistant overlay (such as Sider, Monica, or custom overlay injectors).
 
-## Load it in Chrome
+## Purpose
+Used during proctoring demonstrations and test evaluation to show real-time detection of high z-index layers and browser-level assistive overlays.
 
-1. Open `chrome://extensions`.
-2. Turn on **Developer mode**.
-3. Select **Load unpacked**.
-4. Choose this `demo-overlay` directory.
-5. Open the Vite app's `client/detector-test.html` page (for example, `http://localhost:5173/detector-test.html`).
-6. Wait about three seconds. Press **Alt + O** to hide or show the panel.
+## Installation in Chrome / Brave / Edge
+1. Open `chrome://extensions` in your browser.
+2. Enable **Developer mode** (toggle in the top-right corner).
+3. Click **Load unpacked**.
+4. Select this directory (`demo-overlay`).
 
-The overlay uses a high z-index, a fixed position, an open shadow root, and the `#ai-overlay-demo` fingerprint to exercise the detector. Vite must serve the `client` directory as its project root for the suggested URL; adapt the URL to your setup if needed.
+## Usage
+- Open any web page (or the exam candidate window `http://localhost:5173/candidate/exam/:id`).
+- Press **Alt+O** (or click the extension puzzle piece icon).
+- The floating AI overlay appears in the top-right corner.
+- Within 2 seconds, the client detector captures:
+  - `FIXED_HIGH_Z_NODE` (MED)
+  - `KNOWN_FINGERPRINT` (HIGH)
+- The Proctor Console immediately receives the signal delta, flashes a 1.5s red pulse ring, and raises candidate severity to HIGH.
+- Press **Alt+O** again to dismiss the overlay.

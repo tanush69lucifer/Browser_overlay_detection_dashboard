@@ -1,112 +1,102 @@
-import { DETECTOR_CONFIG, SEVERITIES } from './config.js';
-import { post } from '../api/client.js';
+import api from '../api/client';
+
+/**
+ * Signal Batcher and Dispatcher.
+ * Rules per SPEC Section 6 & 8:
+ * - Emits `signals:batch` { sessionId, signals[] }
+ * - Max 50 signals per batch
+ * - Dispatched every 2.5 seconds
+ * - Dispatched IMMEDIATELY on any HIGH signal
+ * - Falls back to HTTP POST /sessions/:id/signals if socket is offline
+ */
+
+const FLUSH_INTERVAL_MS = 2500;
+const MAX_BATCH_SIZE = 50;
+const LOCAL_DEDUPE_MS = 6000;
 
 export function createBatcher({ socket, sessionId }) {
-  const buffer = [];
-  let stopped = false;
-  let inFlight = false;
-  let offlineSince = null;
-  let fallbackTimer = null;
-  let fallbackInFlight = false;
-  let flushTimer = null;
-  let retryTimer = null;
+  let queue = [];
+  const recentDispatches = new Map(); // key -> last dispatch timestamp
+  let timer = null;
+  let isStopped = false;
 
-  function scheduleFallback(delay = Math.max(0, offlineSince + DETECTOR_CONFIG.offlineFallbackMs - Date.now())) {
-    if (fallbackTimer !== null || fallbackInFlight || !sessionId) return;
-    fallbackTimer = setTimeout(() => {
-      fallbackTimer = null;
-      sendHttpFallback();
-    }, delay);
-  }
-  function startOfflineClock() {
-    if (stopped) return;
-    if (offlineSince === null) offlineSince = Date.now();
-    scheduleFallback();
-  }
-  function clearOfflineClock() {
-    offlineSince = null;
-    clearTimeout(fallbackTimer);
-    fallbackTimer = null;
-  }
-  function push(signal) {
-    if (stopped || !signal || typeof signal.code !== 'string') return;
-    const safe = { code: signal.code, severity: signal.severity || SEVERITIES.LOW, t: Number(signal.t) || Date.now(), meta: signal.meta || {} };
-    if (signal.key) safe.key = String(signal.key).slice(0, 100);
-    if (buffer.length >= DETECTOR_CONFIG.maxSignalBuffer) {
-      const lowIndex = buffer.findIndex(item => item.severity === SEVERITIES.LOW);
-      if (lowIndex !== -1) buffer.splice(lowIndex, 1);
-      else return;
-    }
-    buffer.push(safe);
-    if (!socket?.connected) startOfflineClock();
-    if (safe.severity === SEVERITIES.HIGH) flush();
-  }
+  // Flush queued signals to server
+  const flush = async () => {
+    if (queue.length === 0 || isStopped) return;
 
-  function flush() {
-    if (!buffer.length || inFlight || stopped && !socket?.connected) return;
-    if (!socket?.connected) { startOfflineClock(); return; }
-    inFlight = true;
-    const batch = buffer.splice(0, buffer.length);
-    let settled = false;
-    const timeout = setTimeout(() => settle(false), DETECTOR_CONFIG.ackTimeoutMs);
-    function settle(ok) {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      inFlight = false;
-      if (ok) {
-        clearOfflineClock();
-        if (buffer.length) flush();
-      } else {
-        buffer.unshift(...batch);
-        startOfflineClock();
-        if (!stopped) retryTimer = setTimeout(() => { retryTimer = null; flush(); }, 1000);
+    const signalsToSend = queue.splice(0, MAX_BATCH_SIZE);
+    const payload = {
+      sessionId,
+      signals: signalsToSend,
+    };
+
+    // 1. Attempt delivery via Socket.IO if connected
+    let deliveredViaSocket = false;
+    if (socket && socket.connected) {
+      try {
+        socket.emit('signals:batch', payload, (ack) => {
+          if (ack && ack.ok) {
+            deliveredViaSocket = true;
+          }
+        });
+        deliveredViaSocket = true;
+      } catch (err) {
+        console.warn('[Detector] Socket emission failed, falling back to HTTP:', err);
       }
     }
-    try {
-      socket.emit('signals:batch', { sessionId, signals: batch }, response => settle(Boolean(response?.ok ?? response?.success ?? true)));
-    } catch { settle(false); }
-  }
 
-  async function sendHttpFallback() {
-    if (!buffer.length || !sessionId || fallbackInFlight) return;
-    fallbackInFlight = true;
-    const batch = buffer.splice(0, buffer.length);
-    try {
-      await post(`/sessions/${encodeURIComponent(sessionId)}/signals`, { signals: batch }, { timeoutMs: 5000 });
-      clearOfflineClock();
-    } catch {
-      buffer.unshift(...batch);
-      if (socket?.connected && !stopped) flush();
-      else if (!stopped) {
-        // Retry later without spinning if the API is also unreachable.
-        fallbackInFlight = false;
-        offlineSince = Date.now();
-        scheduleFallback(DETECTOR_CONFIG.offlineFallbackMs);
+    // 2. HTTP Fallback per SPEC Section 5 (POST /sessions/:id/signals)
+    if (!deliveredViaSocket) {
+      try {
+        await api.post(`/sessions/${sessionId}/signals`, { signals: signalsToSend });
+      } catch (httpErr) {
+        console.warn('[Detector] HTTP signal fallback error:', httpErr);
       }
-    } finally {
-      fallbackInFlight = false;
     }
-  }
+  };
 
-  flushTimer = setInterval(flush, DETECTOR_CONFIG.batchFlushMs);
-  if (socket?.on) {
-    socket.on('connect', flush);
-    socket.on('disconnect', startOfflineClock);
-  }
+  // Add signal to queue with local debouncing and immediate HIGH severity flush
+  const enqueue = (signal) => {
+    if (isStopped || !signal) return;
+
+    // Local deduplication for keyed signals
+    if (signal.key) {
+      const dedupeKey = `${signal.code}:${signal.key}`;
+      const lastSent = recentDispatches.get(dedupeKey) || 0;
+      if (Date.now() - lastSent < LOCAL_DEDUPE_MS) {
+        return; // Skip duplicate within debounce window
+      }
+      recentDispatches.set(dedupeKey, Date.now());
+    }
+
+    queue.push(signal);
+
+    // Rule: Immediately flush on any HIGH severity signal (KNOWN_FINGERPRINT, EXTENSION_IFRAME)
+    if (signal.severity === 'HIGH' || queue.length >= MAX_BATCH_SIZE) {
+      flush();
+    }
+  };
+
+  // Periodic flush timer (2.5s)
+  timer = setInterval(flush, FLUSH_INTERVAL_MS);
+
+  // Teardown and final flush
+  const stop = () => {
+    isStopped = true;
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+    // Final flush of remaining items
+    if (queue.length > 0) {
+      flush();
+    }
+    recentDispatches.clear();
+  };
+
   return {
-    push,
+    enqueue,
     flush,
-    stop() {
-      if (stopped) return;
-      stopped = true;
-      clearInterval(flushTimer);
-      clearTimeout(fallbackTimer);
-      clearTimeout(retryTimer);
-      socket?.off?.('connect', flush);
-      socket?.off?.('disconnect', startOfflineClock);
-      if (socket?.connected) flush();
-      else sendHttpFallback();
-    }
+    stop,
   };
 }

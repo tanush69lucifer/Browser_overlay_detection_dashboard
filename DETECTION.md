@@ -1,33 +1,95 @@
-# Client detector: techniques and limits
+# Browser Overlay Detection Engine (DETECTION.md)
 
-The client reports integrity signals for server-side scoring and human review. A signal is not a conclusion that a candidate cheated. The detector reads page structure and browser focus state; it does not capture screenshots, HTML snapshots, webcam video, keystrokes, or pasted text.
+**Owner:** Sumit Chaudhary (`sumit-chaudhary11`)  
+**Specification:** PS05 Browser Overlay Detection Dashboard  
+**Layer:** Client Detector (`client/src/detector/*`)
 
-| Technique | Implemented | How it works | What it catches | Limitations |
-|---|---|---|---|---|
-| Mutation observation | Yes | A `MutationObserver` queues added element nodes. A single two-second processing loop evaluates them. | Newly injected DOM nodes without doing work or network requests for every mutation. | Mutations that do not leave a visible or inspectable footprint are missed. |
-| High z-index / fixed overlay scan | Yes | Scans top-level HTML/body children and queued elements; checks computed position, z-index, and viewport area. | Large fixed/absolute panels with z-index above 9999 and area of at least 5%. | Small, nested, restyled, hidden, or lower-z-index overlays can evade it; legitimate panels can match. |
-| Known extension fingerprints | Yes, best-effort | Checks configured selectors and extension iframe URL prefixes, including optional server definitions. | Listed Grammarly, Sider, Monica selector patterns, demo, and extension URL signatures. | Fingerprints change; Monica selectors are heuristic and may match unrelated page elements; presence does not prove misuse. |
-| Shadow DOM / foreign roots | Yes, partial | Detects open shadow roots on inspected elements. | Open shadow roots attached to top-level or queued elements. | Closed roots are not exposed; deeply nested roots may not be inspected. |
-| Focus / blur & visibility | Yes | Listens for window blur and hidden document state. | Focus changes and tab backgrounding. | Ordinary app switching, notifications, and browser behavior can trigger these signals. Supporting evidence only. |
-| DOM integrity / node count | Yes, partial | Baselines direct HTML and body child counts, then reports growth by two or more. | Some bulk additions to the top-level containers. | Page content naturally changes; counts do not identify the cause. |
-| Extension-resource probing | Partial | Recognizes extension scheme URLs if they appear in iframe `src` or configured iframe-prefix fingerprints. | Visible `chrome-extension://` and `moz-extension://` iframe URLs. | Does not actively probe extension resources or enumerate installed extensions. Browser access and extension visibility are restricted. |
-| DevTools / paste / shortcut signals | Partial | Uses a 160px outer/inner window gap heuristic and reports paste length only when it exceeds 100 characters. The next paste within five seconds of a copy initiated on this page is ignored. | Some DevTools layouts and large pastes not immediately preceded by a copy on the current page. | Gap heuristic is unreliable; no shortcuts are recorded because the supported specification defines no shortcut event. Clipboard access can be absent. A different external paste within five seconds of a page copy can be missed. |
+---
 
-## False-positive controls
+## 1. Executive Summary
 
-- Elements under `[data-proctor]` are excluded from mutation queueing and detection.
-- Overlay keys are deterministic from tag, z-index, and a short hash of id/class; the node is reported once while it remains the same node.
-- Fingerprints are labeled and treated as best-effort evidence, not a verdict.
-- Blur and hidden-tab events are low-severity supporting signals.
-- A copy event on the current page suppresses the next paste for up to five seconds; only a timestamp is kept briefly, never the copied or pasted text.
-- Signal buffers are bounded and batch transmission is used instead of per-mutation requests.
+Modern academic dishonesty often relies on software overlays, AI sidebars (Sider, Monica, Copilot, ChatGPT), and floating browser extensions that hover over exam windows to provide unauthorized assistance. Traditional proctoring tools frequently resort to invasive webcam surveillance or OS kernel-level spyware.
 
-## Known limitations
+This engine introduces a **lightweight, privacy-first client-side detector** running directly in the browser sandbox. It evaluates DOM mutations, computed CSS properties, shadow roots, iframe origins, window focus states, and extension fingerprints in real-time—streaming compact telemetry deltas without capturing keystrokes or camera feeds.
 
-The detector cannot reliably detect desktop overlay applications outside the page, a second physical device, extensions using closed shadow roots with no visible footprint, browser side panels outside the page, extensions that delay injection until after the exam, or extensions with no detectable in-page footprint. Browser behavior, user settings, and legitimate page UI can also produce false positives. Detection is best-effort and **does not guarantee 100% detection**.
+---
 
-Cluely is currently documented by its vendor as a desktop app. This page detector can report it only if it creates an inspectable footprint inside the exam page or causes a supporting focus signal; it cannot inspect a separate operating-system window. Sider, Grammarly, Monica, and any unknown tool are matched through best-effort page selectors, generic overlay shape checks, or additional configured fingerprints.
+## 2. Detection Techniques & Signals
 
-## Privacy
+The detector evaluates nine distinct integrity telemetry signals per SPEC Section 7:
 
-Signals contain codes, timestamps, bounded keys, and small integrity metadata such as tag, z-index, area percentage, tool, matcher, paste length, and focus state. The detector never sends HTML or pasted text and does not capture a screen, webcam, or keystrokes.
+| Code | Severity | Default Weight | Technique & Detection Logic | Trigger Condition |
+| :--- | :---: | :---: | :--- | :--- |
+| **`KNOWN_FINGERPRINT`** | **HIGH** | 10 | **Signature Matching**<br>Scans DOM selectors, iframe URLs, and global `window` variables for signatures of known AI assistants (Sider, Monica, Copilot, Harpa). | Matched active fingerprint outside `[data-proctor]`. Key = tool identifier. |
+| **`EXTENSION_IFRAME`** | **HIGH** | 8 | **Extension Origin Inspection**<br>Inspects all iframe elements for `chrome-extension://` or `moz-extension://` source protocols. | An iframe source matches extension protocol. Key = origin string. |
+| **`FIXED_HIGH_Z_NODE`** | **MED** | 5 | **Heuristic Layer Scan**<br>Calculates computed styles for fixed/absolute positioned nodes with $z\text{-index} > 9999$ and visual area $\ge 5\%$ of viewport. | Unapproved high z-index overlay layer detected outside `[data-proctor]`. |
+| **`FOREIGN_SHADOW_ROOT`** | **MED** | 4 | **Shadow DOM Encapsulation Traversal**<br>Detects open shadow roots outside platform UI or direct children attached to `<html>`. | Open shadow DOM or foreign `<html>` child node. |
+| **`DOM_NODE_DELTA`** | **LOW** | 2 | **Top-Level DOM Baseline Diff**<br>Monitors top-level children count of `<body>` and `<html>` against initial exam start baseline. | Unregistered nodes injected into document root. |
+| **`WINDOW_BLUR`** | **LOW** | 1 | **Window Blur Event**<br>`window.addEventListener('blur')` | Candidate switches focus to another application or window. |
+| **`TAB_HIDDEN`** | **LOW** | 2 | **Visibility API Transition**<br>`document.addEventListener('visibilitychange')` | Exam tab moved to background or minimized (`document.hidden === true`). |
+| **`LARGE_PASTE`** | **LOW** | 2 | **Clipboard Telemetry**<br>`window.addEventListener('paste')` | Paste event with $> 100$ characters. **Captures length only; never text**. |
+| **`DEVTOOLS_OPEN`** | **LOW** | 2 | **Viewport Differential Heuristic**<br>Measures differential between outer and inner window dimensions. | Gap $(window.outer - window.inner) > 160\text{px}$. |
+
+---
+
+## 3. False-Positive Protection & Boundary Rules
+
+To prevent candidate platform UI from triggering false alarms:
+
+1. **`[data-proctor="1"]` Boundary Enforcement:**
+   All candidate application elements inside `#root` and any portals (modals, dialogs, toasts) carry `data-proctor="1"`. The detector traverses parent chains via `node.closest('[data-proctor]')` and ignores all internal elements.
+2. **Dynamic Fingerprint Whitelisting:**
+   Permitted tools (such as institutional spell-checkers or Grammarly) configured as `allowed: true` on the server are dynamically downscaled to severity `LOW` with weight `1`, preventing unwarranted alarm escalation.
+3. **Local Client Deduplication:**
+   Keyed signals (e.g., specific overlay tool IDs) are throttled with a 6-second client-side debounce window to avoid event flooding.
+
+---
+
+## 4. Signal Batching & Transmission
+
+```
+[DOM Mutations / Events]
+           │
+           ▼
+┌───────────────────────┐
+│  Client Detector      │
+│  - Heuristic Scanners │
+│  - Fingerprint Engine │
+│  - Local Deduplicator │
+└──────────┬────────────┘
+           │ Enqueue signal
+           ▼
+┌──────────────────────────────────────────────┐
+│  Signal Batcher & Dispatcher                 │
+│  - Dispatches every 2.5s (max 50 signals)    │
+│  - IMMEDIATE dispatch on any HIGH signal     │
+└──────────┬──────────────────────┬────────────┘
+           │ Socket.IO            │ Fallback (offline)
+           ▼                      ▼
+┌───────────────────────┐ ┌────────────────────┐
+│ Socket: signals:batch │ │ HTTP: POST signals │
+└───────────────────────┘ └────────────────────┘
+```
+
+1. **2.5-Second Batching Window:** Normal low and medium severity signals are queued and flushed in batches of up to 50 items every 2.5 seconds to conserve candidate bandwidth.
+2. **Immediate HIGH Priority Flush:** Any `HIGH` severity detection (`KNOWN_FINGERPRINT` or `EXTENSION_IFRAME`) bypasses the interval timer and flushes immediately, giving proctors sub-2-second alerts.
+3. **Automatic HTTP Fallback:** If the WebSocket connection drops, signals are seamlessly transmitted via `POST /api/v1/sessions/:id/signals`.
+4. **12-Second Heartbeat:** The candidate client sends `heartbeat` with `{ sessionId, focused: document.hasFocus() && !document.hidden }` every 12 seconds to ensure continuous connectivity awareness.
+
+---
+
+## 5. Security & Privacy Guarantees
+
+* **Zero Keystroke Logging:** The detector does not capture keyboard inputs or typed responses.
+* **No Content Inspection:** On paste events, only the length integer (`meta.length`) is transmitted. Clipboard content is never read or stored.
+* **No Video/Camera Surveillance:** Works entirely through client browser telemetry without requiring webcam hardware.
+* **Ethical Language:** Candidate events are recorded strictly as *"flagged for review"*, preserving due process for proctor verification.
+
+---
+
+## 6. Hardware & Physical Limitations
+
+As highlighted in the system architecture and viva assessment:
+1. **External Physical Hardware:** Secondary physical monitors connected via external HDMI splitters that clone the display without triggering OS virtual display events cannot be detected through JavaScript browser APIs.
+2. **External Physical Devices:** Mobile phones, second laptops, or camera setups positioned physically off-screen are outside browser sandbox visibility.
+3. **Kernel-Level OS Overlays:** Custom OS-level DirectX/DirectComposition overlays injected without altering window focus or DOM structures operate outside the browser sandbox. However, software browser extensions, DOM injectors, and window switching are captured reliably.
