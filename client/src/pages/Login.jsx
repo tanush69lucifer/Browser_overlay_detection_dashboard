@@ -15,6 +15,7 @@ export default function Login() {
   const [form, setForm] = useState(initialState);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (user) navigate('/');
@@ -89,15 +90,30 @@ export default function Login() {
                 onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
               />
 
-              <Input
-                label="Password"
-                type="password"
-                name="password"
-                value={form.password}
-                placeholder="Enter password"
-                error={errors.password}
-                onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-              />
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <label htmlFor="login-password" className="text-sm font-medium text-slate-100">Password</label>
+                  <button
+                    type="button"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((current) => !current)}
+                    className="rounded-md text-xs font-medium text-primary hover:text-indigo-300 focus:outline-none focus:ring-2 focus:ring-primary/60"
+                  >
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <Input
+                  id="login-password"
+                  type={showPassword ? 'text' : 'password'}
+                  name="password"
+                  autoComplete="current-password"
+                  value={form.password}
+                  placeholder="Enter password"
+                  error={errors.password}
+                  onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+                />
+              </div>
 
               <Button type="submit" className="w-full" loading={submitting}>
                 {submitting ? 'Signing in...' : 'Login'}
