@@ -67,6 +67,34 @@ function signalDescription(item) {
   return item.code;
 }
 
+function flagTitle(flag) {
+  if (flag.code === 'KNOWN_FINGERPRINT') {
+    const signals = Array.isArray(flag.evidence?.signals) ? flag.evidence.signals : [];
+    const fingerprint = signals.find((signal) => signal.code === 'KNOWN_FINGERPRINT');
+    return fingerprint?.meta?.allowed
+      ? 'Configured allowed tool detected'
+      : 'Potential overlay/helper tool detected';
+  }
+  if (flag.code === 'FIXED_HIGH_Z_NODE') return 'Potential floating overlay detected';
+  if (flag.code === 'EXTENSION_IFRAME') return 'Browser extension frame detected';
+  return `Integrity signal flagged for review · ${signalLabel(flag.code)}`;
+}
+
+function flagTool(flag) {
+  if (flag.evidence?.tool) return flag.evidence.tool;
+  const signals = Array.isArray(flag.evidence?.signals) ? flag.evidence.signals : [];
+  const fingerprint = signals.find((signal) => signal.code === 'KNOWN_FINGERPRINT');
+  return fingerprint?.meta?.name || fingerprint?.meta?.tool || null;
+}
+
+function flagEventTime(flag) {
+  const signals = Array.isArray(flag.evidence?.signals) ? flag.evidence.signals : [];
+  const relevantSignal = signals.find((signal) =>
+    ['KNOWN_FINGERPRINT', 'EXTENSION_IFRAME', 'FIXED_HIGH_Z_NODE'].includes(signal.code)
+  );
+  return relevantSignal?.t || flag.t || flag.raisedAt;
+}
+
 export default function Console() {
   const { examId } = useParams();
   const navigate = useNavigate();
@@ -367,24 +395,27 @@ export default function Console() {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-medium text-white">
-                      {item.kind === 'FLAG'
-                        ? `Flag for review · ${item.evidence?.tool || signalLabel(item.code)}`
-                        : signalLabel(item.code)}
+                      {item.kind === 'FLAG' ? flagTitle(item) : signalLabel(item.code)}
                     </p>
                     <p className="mt-1 text-xs text-slate-400">
-                      {item.candidate?.name || 'Candidate'} · {formatTime(item.t || item.raisedAt)}
+                      {item.candidate?.name || 'Candidate'} · {formatTime(item.kind === 'FLAG' ? flagEventTime(item) : item.t || item.raisedAt)}
                     </p>
                   </div>
                   <Badge tone={severityTone(item.severity)}>{item.severity || 'LOW'}</Badge>
                 </div>
                 {item.kind === 'FLAG' ? (
-                  <Button
-                    variant="ghost"
-                    className="mt-3 w-full"
-                    onClick={() => navigate(`/proctor/session/${item.sessionId}`)}
-                  >
-                    Review candidate
-                  </Button>
+                  <>
+                    {flagTool(item) ? (
+                      <p className="mt-2 text-sm text-slate-300">Detected tool: <span className="font-medium text-white">{flagTool(item)}</span></p>
+                    ) : null}
+                    <Button
+                      variant="ghost"
+                      className="mt-3 w-full"
+                      onClick={() => navigate(`/proctor/session/${item.sessionId}`)}
+                    >
+                      View Evidence
+                    </Button>
+                  </>
                 ) : (
                   <p className="mt-2 text-xs text-slate-400">{signalDescription(item)}</p>
                 )}

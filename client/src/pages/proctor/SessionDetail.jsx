@@ -16,6 +16,35 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
 }
 
+function flagTitle(flag) {
+  if (flag.code === 'KNOWN_FINGERPRINT') {
+    const fingerprint = evidenceSignals(flag).find((signal) => signal.code === 'KNOWN_FINGERPRINT');
+    return fingerprint?.meta?.allowed
+      ? 'Configured allowed tool detected'
+      : 'Potential overlay/helper tool detected';
+  }
+  if (flag.code === 'FIXED_HIGH_Z_NODE') return 'Potential floating overlay detected';
+  if (flag.code === 'EXTENSION_IFRAME') return 'Browser extension frame detected';
+  return String(flag.code).replaceAll('_', ' ');
+}
+
+function evidenceSignals(flag) {
+  return Array.isArray(flag.evidence?.signals) ? flag.evidence.signals : [];
+}
+
+function detectedTool(flag) {
+  if (flag.evidence?.tool) return flag.evidence.tool;
+  const fingerprint = evidenceSignals(flag).find((signal) => signal.code === 'KNOWN_FINGERPRINT');
+  return fingerprint?.meta?.name || fingerprint?.meta?.tool || null;
+}
+
+function flagEventTime(flag) {
+  const signal = evidenceSignals(flag).find((item) =>
+    ['KNOWN_FINGERPRINT', 'EXTENSION_IFRAME', 'FIXED_HIGH_Z_NODE'].includes(item.code)
+  );
+  return signal?.t || flag.raisedAt;
+}
+
 export default function SessionDetail() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -118,8 +147,8 @@ export default function SessionDetail() {
             <Card key={flag._id} className="space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h3 className="font-semibold text-white">{String(flag.code).replaceAll('_', ' ')}</h3>
-                  <p className="mt-1 text-sm text-slate-400">{formatDate(flag.raisedAt)}</p>
+                  <h3 className="font-semibold text-white">{flagTitle(flag)}</h3>
+                  <p className="mt-1 text-sm text-slate-400">Event time · {formatDate(flagEventTime(flag))}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge tone={severityTone(flag.severity)}>{flag.severity}</Badge>
@@ -128,10 +157,50 @@ export default function SessionDetail() {
               </div>
 
               <div className="rounded-xl border border-slate-700 bg-slate-950/60 p-3">
-                <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Evidence</p>
-                <pre className="overflow-x-auto whitespace-pre-wrap break-words text-xs text-slate-200">
-                  {JSON.stringify(flag.evidence || {}, null, 2)}
-                </pre>
+                <p className="mb-3 text-xs uppercase tracking-wide text-slate-400">Evidence · metadata only</p>
+                <div className="grid gap-3 text-sm sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs text-slate-400">Candidate</p>
+                    <p className="mt-1 text-white">{candidate.name || 'Candidate'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400">Detected tool</p>
+                    <p className="mt-1 text-white">{detectedTool(flag) || 'No configured tool match'}</p>
+                  </div>
+                </div>
+                {evidenceSignals(flag).length ? (
+                  <ul className="mt-4 space-y-3">
+                    {evidenceSignals(flag).map((signal, index) => {
+                      const meta = signal.meta || {};
+                      const title = meta.name || meta.tool || String(signal.code).replaceAll('_', ' ');
+                      return (
+                        <li key={`${signal.code}-${signal.t}-${index}`} className="rounded-lg border border-slate-700/80 p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-medium text-white">{title}</span>
+                            <div className="flex items-center gap-2">
+                              <Badge tone={severityTone(signal.severity)}>{signal.severity || 'LOW'}</Badge>
+                              <span className="text-xs text-slate-400">{formatDate(signal.t)}</span>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-xs text-slate-300">
+                            {meta.type ? `Match type: ${meta.type}` : null}
+                            {meta.allowed ? ' · Admin-configured allowed tool' : null}
+                            {meta.zIndex !== undefined ? ` · z-index: ${meta.zIndex}` : null}
+                            {meta.areaRatio !== undefined ? ` · viewport area: ${Math.round(Number(meta.areaRatio) * 100)}%` : null}
+                            {meta.persistentMs !== undefined ? ` · present for at least ${meta.persistentMs / 1000}s` : null}
+                            {meta.extensionOrigin ? ` · extension origin: ${meta.extensionOrigin}` : null}
+                            {meta.title ? ` · tab title: ${meta.title}` : null}
+                            {meta.url ? ` · tab URL: ${meta.url}` : null}
+                            {meta.isExamTab !== undefined ? ` · ${meta.isExamTab ? 'exam tab active' : 'different tab active'}` : null}
+                          </p>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="mt-3 text-sm text-slate-300">No additional signal details are available for this flag.</p>
+                )}
+                <p className="mt-3 text-xs text-slate-500">No screenshot or page content is captured.</p>
               </div>
 
               <label className="block space-y-2 text-sm text-slate-300">
