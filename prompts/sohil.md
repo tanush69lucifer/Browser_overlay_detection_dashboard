@@ -7,3 +7,4 @@
 | 3 | Add cached fingerprint and threshold config loader with 30s TTL | `scoring/configCache.js` for fingerprints, thresholds and exam sensitivity |
 | 4 | Add sliding signal window using Redis sorted set with in-memory fallback | `redis/signalWindow.js` with add() and clear() |
 | 5 | Add debounce for persistent overlay signals with Redis SET NX EX | `scoring/debounce.js` with 60s/10s TTL |
+| 6 | Add buffered bulk flag writer flushing to Mongo every 2s | `scoring/flagWriter.js` with Flag.insertMany and Session bulkWrite |
