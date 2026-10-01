@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const MATCHER_TYPES = ['SELECTOR', 'IFRAME_SRC', 'GLOBAL_VAR'];
+const MATCHER_TYPES = ['SELECTOR', 'IFRAME_SRC', 'GLOBAL_VAR', 'EXTENSION_RESOURCE'];
 const SEVERITIES = ['LOW', 'MED', 'HIGH'];
 
 const fingerprintSchema = new mongoose.Schema({
@@ -8,6 +8,7 @@ const fingerprintSchema = new mongoose.Schema({
   tool: { type: String, required: true, trim: true, maxlength: 100, index: true },
   matcherType: { type: String, enum: MATCHER_TYPES, required: true },
   matcher: { type: String, required: true, trim: true, maxlength: 500 },
+  resourcePath: { type: String, trim: true, maxlength: 200, default: '' },
   weight: { type: Number, required: true, default: 10, min: 1 },
   severity: { type: String, enum: SEVERITIES, required: true, default: 'HIGH' },
   description: { type: String, default: '', maxlength: 500 },

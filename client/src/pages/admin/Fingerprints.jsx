@@ -22,6 +22,7 @@ const EMPTY_FORM = {
   tool: '',
   matcherType: 'SELECTOR',
   matcher: '',
+  resourcePath: '',
   weight: 10,
   severity: 'HIGH',
   isActive: true,
@@ -81,6 +82,7 @@ export default function Fingerprints() {
       tool: fingerprint.tool || '',
       matcherType: fingerprint.matcherType || 'SELECTOR',
       matcher: fingerprint.matcher || '',
+      resourcePath: fingerprint.resourcePath || '',
       weight: fingerprint.weight || 10,
       severity: fingerprint.severity || 'HIGH',
       isActive: Boolean(fingerprint.isActive),
@@ -92,6 +94,10 @@ export default function Fingerprints() {
   const saveFingerprint = async () => {
     if (!draft.name || !draft.matcher) {
       toast.error('Name and matcher are required');
+      return;
+    }
+    if (draft.matcherType === 'EXTENSION_RESOURCE' && !draft.resourcePath.trim()) {
+      toast.error('Resource path is required for extension resource probes');
       return;
     }
 
@@ -252,7 +258,10 @@ export default function Fingerprints() {
                   <tr key={fingerprint._id || fingerprint.id} className="bg-surface/40">
                     <td className="px-4 py-3 font-medium text-white">{fingerprint.name}</td>
                     <td className="px-4 py-3">{fingerprint.tool}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-300">{fingerprint.matcher}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-slate-300">
+                      {fingerprint.matcher}
+                      {fingerprint.matcherType === 'EXTENSION_RESOURCE' ? <span className="block text-slate-500">/{fingerprint.resourcePath}</span> : null}
+                    </td>
                     <td className="px-4 py-3 text-slate-200">{fingerprint.weight}</td>
                     <td className="px-4 py-3">
                       <Badge tone={fingerprint.severity || 'HIGH'}>{fingerprint.severity || 'HIGH'}</Badge>
@@ -298,11 +307,18 @@ export default function Fingerprints() {
             <Select
               label="Matcher type"
               value={draft.matcherType}
-              onChange={(event) => setDraft((current) => ({ ...current, matcherType: event.target.value }))}
+              onChange={(event) => setDraft((current) => ({
+                ...current,
+                matcherType: event.target.value,
+                ...(event.target.value === 'EXTENSION_RESOURCE' && current.matcherType !== 'EXTENSION_RESOURCE'
+                  ? { severity: 'MED', weight: 4, resourcePath: 'probe.svg' }
+                  : {}),
+              }))}
               options={[
                 { value: 'SELECTOR', label: 'SELECTOR' },
                 { value: 'IFRAME_SRC', label: 'IFRAME_SRC' },
                 { value: 'GLOBAL_VAR', label: 'GLOBAL_VAR' },
+                { value: 'EXTENSION_RESOURCE', label: 'EXTENSION_RESOURCE (best effort)' },
               ]}
             />
             {draft.allowed ? <p className="text-xs text-slate-400">Allowed tools are retained as fingerprint evidence and scored LOW at weight 1.</p> : null}
@@ -310,10 +326,24 @@ export default function Fingerprints() {
           </div>
 
           <Input
-            label="Matcher"
+            label={draft.matcherType === 'EXTENSION_RESOURCE' ? 'Chrome/Edge extension ID' : 'Matcher'}
             value={draft.matcher}
             onChange={(event) => setDraft((current) => ({ ...current, matcher: event.target.value }))}
           />
+
+          {draft.matcherType === 'EXTENSION_RESOURCE' ? (
+            <>
+              <Input
+                label="Web-accessible resource path"
+                placeholder="probe.svg"
+                value={draft.resourcePath}
+                onChange={(event) => setDraft((current) => ({ ...current, resourcePath: event.target.value }))}
+              />
+              <p className="text-xs text-amber-200/80">
+                A reachable resource is positive evidence. A blocked or missing resource is inconclusive and does not prove the extension is absent. The extension must expose this image as a web-accessible resource.
+              </p>
+            </>
+          ) : null}
 
           <Select
             label="Severity"

@@ -46,6 +46,9 @@ function formatTime(value) {
 }
 
 function signalDescription(item) {
+  if (item.code === 'EXTENSION_RESOURCE_PROBE') {
+    return `Configured extension resource is reachable (${item.meta?.tool || 'extension'}). A positive resource check does not prove what the extension is doing.`;
+  }
   const meta = item.meta || {};
   if (item.code === 'KNOWN_FINGERPRINT') {
     return [meta.name, meta.tool].filter(Boolean).join(' · ') || 'Configured fingerprint matched';

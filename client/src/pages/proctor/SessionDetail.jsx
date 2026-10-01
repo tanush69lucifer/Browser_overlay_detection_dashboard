@@ -202,6 +202,7 @@ export default function SessionDetail() {
 }
 
 function signalDescription(signal) {
+  if (signal.code === 'EXTENSION_RESOURCE_PROBE') return `Configured extension resource reachable: ${signal.meta?.tool || 'extension'}. This is a best-effort presence clue, not proof of behavior.`;
   const meta = signal.meta || {};
   if (signal.code === 'KNOWN_FINGERPRINT') return [meta.name, meta.tool].filter(Boolean).join(' · ') || 'Known overlay/extension fingerprint matched';
   if (signal.code === 'FIXED_HIGH_Z_NODE') return `Large positioned element · z-index ${meta.zIndex ?? 'unknown'} · ${Math.round(Number(meta.areaRatio || 0) * 100)}% viewport`;

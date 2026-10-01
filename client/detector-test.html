@@ -48,6 +48,8 @@
     #stats { display: flex; gap: 12px; margin-bottom: 16px; font-size: 12px; }
     .stat-pill { background: #0b0f17; border: 1px solid #1e293b; padding: 6px 12px; border-radius: 6px; }
     .stat-num { font-weight: bold; margin-left: 4px; }
+    .probe-input { box-sizing: border-box; width: 100%; margin: 6px 0 10px; padding: 9px; color: #e2e8f0; background: #0b0f17; border: 1px solid #334155; border-radius: 6px; }
+    #probe-result { min-height: 42px; margin: 8px 0 0; padding: 10px; border-radius: 6px; background: #0b0f17; color: #cbd5e1; line-height: 1.5; }
   </style>
 </head>
 <body>
@@ -78,6 +80,18 @@
       <button class="btn" onclick="triggerLargePaste()">📋 6. Simulate Large Paste (&gt;100 chars) (LOW)</button>
       <button class="btn" onclick="triggerWindowBlur()">👁️ 7. Trigger Window Blur Event (LOW)</button>
       <button class="btn" onclick="triggerDevToolsGap()">🔍 8. Trigger DevTools Outer/Inner Gap (LOW)</button>
+
+      <div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid #1e293b;">
+        <h3 style="font-size: 13px; margin: 0; color: #fff;">Extension resource probe</h3>
+        <p>Enter the ID of the unpacked demo extension from chrome://extensions. The extension must expose probe.svg.</p>
+        <label for="probe-id" style="font-size: 11px; color: #94a3b8;">Chrome / Edge extension ID</label>
+        <input id="probe-id" class="probe-input" autocomplete="off" placeholder="32 letters, a–p">
+        <label for="probe-path" style="font-size: 11px; color: #94a3b8;">Resource path</label>
+        <input id="probe-path" class="probe-input" value="probe.svg" autocomplete="off">
+        <button class="btn warn" onclick="runExtensionProbe()">🧪 Probe configured resource</button>
+        <div id="probe-result" role="status" aria-live="polite">No probe run yet.</div>
+        <p>NOT_OBSERVED or TIMEOUT is inconclusive: the extension may hide its resource or the browser may block the request.</p>
+      </div>
 
       <div style="margin-top: 16px; border-top: 1px solid #1e293b; pt-3;">
         <button class="btn clear" onclick="clearInjections()">🧹 Clean Injected Test Elements</button>
@@ -111,6 +125,7 @@
   <!-- Load Detector Script as Module -->
   <script type="module">
     import { startDetector } from './src/detector/index.js';
+    import { probeExtensionResource, EXTENSION_PROBE_LIMIT } from './src/detector/extensionProbe.js';
 
     let total = 0, high = 0, med = 0, low = 0;
 
@@ -228,6 +243,23 @@
 
     window.triggerDevToolsGap = () => {
       window.dispatchEvent(new Event('resize'));
+    };
+
+    window.runExtensionProbe = async () => {
+      const output = document.getElementById('probe-result');
+      output.textContent = 'Checking…';
+      const result = await probeExtensionResource({
+        extensionId: document.getElementById('probe-id').value,
+        resourcePath: document.getElementById('probe-path').value,
+      });
+      output.textContent = `${result.status}: ${result.reason || result.message || ''} ${EXTENSION_PROBE_LIMIT}`;
+      if (result.status === 'DETECTED') {
+        logSignal({
+          code: 'EXTENSION_RESOURCE_PROBE', severity: 'MED', t: Date.now(),
+          key: `extension-resource:${result.extensionId}:${result.resourcePath}`,
+          meta: { tool: 'DEMO_EXTENSION_TEST', extensionId: result.extensionId, resourcePath: result.resourcePath, result: 'RESOURCE_REACHABLE', limitation: 'Best-effort resource reachability clue.' },
+        });
+      }
     };
 
     window.clearInjections = () => {
