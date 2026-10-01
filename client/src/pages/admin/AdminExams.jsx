@@ -9,7 +9,6 @@ import EmptyState from '../../components/ui/EmptyState';
 import ErrorState from '../../components/ui/ErrorState';
 import Input from '../../components/ui/Input';
 import Modal from '../../components/ui/Modal';
-import Select from '../../components/ui/Select';
 import Skeleton from '../../components/ui/Skeleton';
 
 const EMPTY_FORM = {
@@ -314,16 +313,30 @@ export default function AdminExams() {
               value={draft.title}
               onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
             />
-            <Select
-              label="Sensitivity"
-              value={draft.sensitivity}
-              onChange={(event) => setDraft((current) => ({ ...current, sensitivity: event.target.value }))}
-              options={[
-                { value: 'LOW', label: 'LOW' },
-                { value: 'MEDIUM', label: 'MEDIUM' },
-                { value: 'HIGH', label: 'HIGH' },
-              ]}
-            />
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium text-slate-100">Sensitivity</legend>
+              <input
+                type="range"
+                min="0"
+                max="2"
+                step="1"
+                value={['LOW', 'MEDIUM', 'HIGH'].indexOf(draft.sensitivity)}
+                aria-label="Exam sensitivity"
+                aria-valuetext={draft.sensitivity}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    sensitivity: ['LOW', 'MEDIUM', 'HIGH'][Number(event.target.value)],
+                  }))
+                }
+                className="w-full accent-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+              <div className="flex justify-between text-xs font-medium uppercase tracking-wide text-slate-400">
+                <span className={draft.sensitivity === 'LOW' ? 'text-ok' : ''}>Low</span>
+                <span className={draft.sensitivity === 'MEDIUM' ? 'text-warn' : ''}>Medium</span>
+                <span className={draft.sensitivity === 'HIGH' ? 'text-danger' : ''}>High</span>
+              </div>
+            </fieldset>
           </div>
 
           <Input

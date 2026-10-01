@@ -87,13 +87,14 @@ export default function MyExams() {
         {exams.map((exam) => {
           const status = statusByDate(exam.startAt, exam.endAt);
           const isLive = status === 'Live';
+          const statusTone = isLive ? 'OK' : status === 'Upcoming' ? 'INFO' : 'NEUTRAL';
           return (
             <Card key={exam._id || exam.id} className="p-4 md:p-5">
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-xl font-semibold text-white">{exam.title}</h2>
-                    <Badge tone={status === 'Live' ? 'LOW' : status === 'Upcoming' ? 'MED' : 'NONE'}>{status}</Badge>
+                    <Badge tone={statusTone}>{status}</Badge>
                   </div>
 
                   <div className="grid gap-2 text-sm text-slate-300 sm:grid-cols-2">
