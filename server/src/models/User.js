@@ -9,6 +9,8 @@ const userSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: function passwordRequired() { return !this.googleSub; }, select: false },
     googleSub: { type: String, default: undefined, unique: true, sparse: true, select: false },
+    resetPasswordToken: { type: String, default: undefined, select: false },
+    resetPasswordExpires: { type: Date, default: undefined, select: false },
     role: { type: String, enum: ROLES, default: 'CANDIDATE', index: true },
     isActive: { type: Boolean, default: true },
   },
