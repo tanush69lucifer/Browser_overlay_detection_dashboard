@@ -266,7 +266,12 @@ async function run() {
   }, DURATION_SEC * 1000);
 }
 
-run().catch((err) => {
-  console.error('[LoadTest] Fatal error:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  run().catch((err) => {
+    console.error('[LoadTest] Fatal error:', err);
+    process.exit(1);
+  });
+}
+
+module.exports = { run };
+
