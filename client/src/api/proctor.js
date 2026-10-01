@@ -6,6 +6,6 @@ export const getSessionFlags = (sessionId) => api.get(`/sessions/${sessionId}/fl
 export const getSessionSignals = (sessionId) => api.get(`/sessions/${sessionId}/signals`);
 export const getExamSignals = (examId) => api.get(`/exams/${examId}/signals`);
 export const reviewFlag = (flagId, payload) => api.patch(`/flags/${flagId}`, payload);
-export const getExamReport = (examId) => api.get(`/exams/${examId}/report`);
-export const downloadExamReport = (examId) =>
-  api.get(`/exams/${examId}/report`, { params: { format: 'csv' }, responseType: 'blob' });
+export const getExamReport = (examId, params = {}) => api.get(`/exams/${examId}/report`, { params });
+export const downloadExamReport = (examId, params = {}) =>
+  api.get(`/exams/${examId}/report`, { params: { ...params, format: 'csv' }, responseType: 'blob' });
