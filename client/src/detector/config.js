@@ -24,8 +24,6 @@ export const DETECTOR_CONFIG = Object.freeze({
   offlineFallbackMs: 10000,
   ackTimeoutMs: 5000
 });
-<<<<<<< HEAD
-
 // Known signatures are best-effort clues, not proof that a tool is being misused.
 export const DEFAULT_FINGERPRINTS = Object.freeze([
   { tool: 'GRAMMARLY', matcherType: 'SELECTOR', selectors: ['grammarly-desktop-integration', 'grammarly-extension', '[data-grammarly-shadow-root]', 'body[data-gr-ext-installed]'], bestEffort: true },
@@ -37,5 +35,3 @@ export const DEFAULT_FINGERPRINTS = Object.freeze([
   { tool: 'DEMO', matcherType: 'SELECTOR', selectors: ['#ai-overlay-demo', '#proctor-demo-overlay'], bestEffort: true },
   { tool: 'ANY_EXTENSION', matcherType: 'IFRAME_SRC', prefixes: ['chrome-extension://', 'moz-extension://'], bestEffort: true }
 ]);
-=======
->>>>>>> origin/main

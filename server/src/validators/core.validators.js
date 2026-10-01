@@ -20,6 +20,10 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+const googleLoginSchema = z.object({
+  credential: z.string().min(100).max(10000),
+});
+
 const listQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
@@ -81,6 +85,7 @@ const endSessionSchema = z.object({
 module.exports = {
   registerSchema,
   loginSchema,
+  googleLoginSchema,
   listQuery,
   userListQuery,
   sessionListQuery,

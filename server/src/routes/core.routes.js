@@ -11,6 +11,7 @@ const sessions = require('../controllers/sessions.controller');
 // Auth
 router.post('/auth/register', optionalAuth, validate(v.registerSchema), auth.register);
 router.post('/auth/login', validate(v.loginSchema), auth.login);
+router.post('/auth/google', validate(v.googleLoginSchema), auth.googleLogin);
 router.get('/auth/me', requireAuth, auth.me);
 router.post('/auth/logout', requireAuth, auth.logout);
 

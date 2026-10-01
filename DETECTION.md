@@ -90,11 +90,7 @@ To prevent candidate platform UI from triggering false alarms:
 ## 5. Security & Privacy Guarantees
 
 * **Zero Keystroke Logging:** The detector does not capture keyboard inputs or typed responses.
-<<<<<<< HEAD
-* **Paste Privacy:** The browser exposes the pasted text to the paste event; the detector measures its length in memory, then only the length integer (`meta.length`) is transmitted. It does not retain or send the text.
-=======
 * **No Clipboard Inspection:** Paste detection records only that a paste event occurred. It does not read clipboard contents or text length.
->>>>>>> origin/main
 * **No Video/Camera Surveillance:** Works entirely through client browser telemetry without requiring webcam hardware.
 * **Optional active-tab metadata:** The separate browser companion requires the browser's `tabs` permission. During an active exam it reports only the active HTTP(S) tab's origin/path and title; query strings and fragments are removed. It does not read page text or collect browsing history. Without the companion, only the exam page's ordinary focus/visibility events are available.
 * **Flag evidence retention:** Signals are processed in memory/Redis; when signals contribute to a flag, their compact metadata is retained in that flag's evidence for Proctor review. This includes sanitized active-tab origin/path and title when the companion is installed.

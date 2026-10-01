@@ -3,6 +3,8 @@ const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const { ok } = require('../utils/response');
 const { signToken } = require('../utils/token');
+const config = require('../config/env');
+const { verifyGoogleCredential } = require('../utils/googleIdentity');
 
 const publicUser = (u) => ({ _id: u._id, name: u.name, email: u.email, role: u.role });
 
@@ -35,6 +37,45 @@ const login = asyncHandler(async (req, res) => {
   ok(res, { token: signToken(user), user: publicUser(user) }, { message: 'Logged in' });
 });
 
+const googleLogin = asyncHandler(async (req, res) => {
+  if (!config.googleClientId) {
+    throw new ApiError(503, 'GOOGLE_LOGIN_NOT_CONFIGURED', 'Google sign-in has not been configured by the app administrator');
+  }
+
+  const claims = await verifyGoogleCredential(req.body.credential, config.googleClientId);
+  const email = String(claims.email).trim().toLowerCase();
+  let user = await User.findOne({ $or: [{ googleSub: claims.sub }, { email }] }).select('+googleSub');
+
+  if (user) {
+    if (!user.isActive) throw new ApiError(401, 'INVALID_CREDENTIALS', 'This account is unavailable');
+    if (user.googleSub && user.googleSub !== claims.sub) {
+      throw new ApiError(409, 'GOOGLE_ACCOUNT_MISMATCH', 'This email is linked to a different Google account');
+    }
+    if (!user.googleSub) {
+      user.googleSub = claims.sub;
+      await user.save();
+    }
+  } else {
+    const fallbackName = email.split('@')[0].slice(0, 80);
+    try {
+      user = await User.create({
+        name: String(claims.name || fallbackName).trim().slice(0, 80) || fallbackName,
+        email,
+        googleSub: claims.sub,
+        role: 'CANDIDATE',
+      });
+    } catch (error) {
+      if (error.code !== 11000) throw error;
+      user = await User.findOne({ $or: [{ googleSub: claims.sub }, { email }] }).select('+googleSub');
+      if (!user || (user.googleSub && user.googleSub !== claims.sub)) {
+        throw new ApiError(409, 'GOOGLE_ACCOUNT_MISMATCH', 'Unable to link this Google account');
+      }
+    }
+  }
+
+  ok(res, { token: signToken(user), user: publicUser(user) }, { message: 'Logged in with Google' });
+});
+
 const me = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user.id).lean();
   if (!user || !user.isActive) throw new ApiError(401, 'UNAUTHENTICATED', 'Account not found');
@@ -44,4 +85,4 @@ const me = asyncHandler(async (req, res) => {
 // JWT is stateless: the client deletes its token. Endpoint exists for a consistent API.
 const logout = (req, res) => ok(res, null, { message: 'Logged out' });
 
-module.exports = { register, login, me, logout };
+module.exports = { register, login, googleLogin, me, logout };
