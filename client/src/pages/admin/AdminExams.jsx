@@ -311,11 +311,12 @@ export default function AdminExams() {
                 key={user._id || user.id}
                 onClick={() => toggleSelection(field, String(user._id || user.id))}
                 className={[
-                  'rounded-xl border px-2.5 py-2 text-left text-xs transition',
+                  'min-w-36 rounded-xl border px-2.5 py-2 text-left text-xs transition',
                   active ? 'border-primary bg-primary/10 text-primary' : 'border-slate-600 bg-slate-900/60 text-slate-200',
                 ].join(' ')}
               >
-                {user.name}
+                <span className="block font-medium">{user.name}</span>
+                {user.email ? <span className="mt-1 block break-all text-[10px] text-slate-400">{user.email}</span> : null}
               </button>
             );
           })
@@ -584,7 +585,13 @@ export default function AdminExams() {
             <Button variant="ghost" onClick={() => setModalOpen(false)}>
               Cancel
             </Button>
-            <Button loading={submitting} onClick={saveExam}>
+            <Button
+              loading={submitting}
+              onClick={saveExam}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.preventDefault();
+              }}
+            >
               {editingId ? 'Save changes' : 'Create exam'}
             </Button>
           </div>
@@ -600,6 +607,9 @@ export default function AdminExams() {
       >
         <form
           className="space-y-4"
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') event.preventDefault();
+          }}
           onSubmit={(event) => {
             event.preventDefault();
             saveProctor();

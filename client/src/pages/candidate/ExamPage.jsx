@@ -27,6 +27,7 @@ export default function ExamPage() {
   const navigate = useNavigate();
   const socketRef = useRef(null);
   const stopDetectorRef = useRef(null);
+  const activeSessionRef = useRef(false);
 
   const [exam, setExam] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -53,11 +54,21 @@ export default function ExamPage() {
       socketRef.current.disconnect();
       socketRef.current = null;
     }
+    if (activeSessionRef.current && document.fullscreenElement && document.exitFullscreen) {
+      activeSessionRef.current = false;
+      document.exitFullscreen().catch((err) => {
+        console.warn('[Exam] Unable to exit fullscreen:', err.message);
+      });
+    }
+  };
+
+  const closeExamRules = () => {
     if (document.fullscreenElement && document.exitFullscreen) {
       document.exitFullscreen().catch((err) => {
         console.warn('[Exam] Unable to exit fullscreen:', err.message);
       });
     }
+    navigate('/candidate');
   };
 
   const loadExam = async () => {
@@ -136,8 +147,13 @@ export default function ExamPage() {
       try {
         await document.documentElement.requestFullscreen();
       } catch {
-        toast.error('Fullscreen could not be enabled. You can enter fullscreen manually.');
+        toast.error('Fullscreen is required to start the exam. Please try again.');
+        return;
       }
+    }
+    if (!document.fullscreenElement) {
+      toast.error('Fullscreen is required to start the exam. Please try again.');
+      return;
     }
 
     try {
@@ -149,6 +165,7 @@ export default function ExamPage() {
       const nextSessionId = session?.sessionId || session?._id || session?.id;
       if (!nextSessionId) throw new Error('No active exam session was returned');
 
+      activeSessionRef.current = true;
       const nextStartedAt = session?.startedAt || new Date().toISOString();
       const startedAtMs = new Date(nextStartedAt).getTime();
       const durationMs = Number(exam.durationMin || 60) * 60 * 1000;
@@ -236,7 +253,7 @@ export default function ExamPage() {
     <div className="min-h-screen bg-base text-text">
       <Modal
         open={!monitoringStarted && !submitted}
-        onClose={() => navigate('/candidate')}
+        onClose={closeExamRules}
         title="Before you begin: exam rules"
         description="Please read these instructions before starting. Your exam timer begins when monitoring starts."
         size="md"
@@ -266,7 +283,14 @@ export default function ExamPage() {
           </p>
 
           <div className="flex justify-end">
-            <Button onClick={startMonitoring}>I understand — Start exam</Button>
+            <Button
+              onClick={startMonitoring}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.preventDefault();
+              }}
+            >
+              I understand — Start exam
+            </Button>
           </div>
         </div>
       </Modal>
@@ -370,6 +394,9 @@ export default function ExamPage() {
               variant="primary"
               loading={submitting}
               onClick={handleSubmit}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.preventDefault();
+              }}
               className="min-w-[150px]"
             >
               Submit

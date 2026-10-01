@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { getExams } from '../../api/exams';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -44,6 +45,29 @@ export default function MyExams() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const startExam = async (examId) => {
+    if (!document.fullscreenElement) {
+      if (!document.documentElement.requestFullscreen) {
+        toast.error('Fullscreen is required to start this exam, but is not supported by this browser.');
+        return;
+      }
+
+      try {
+        await document.documentElement.requestFullscreen();
+      } catch {
+        toast.error('Allow fullscreen to start the exam.');
+        return;
+      }
+
+      if (!document.fullscreenElement) {
+        toast.error('Fullscreen is required to start this exam. Please try again.');
+        return;
+      }
+    }
+
+    navigate(`/candidate/exam/${examId}`);
   };
 
   useEffect(() => {
@@ -117,7 +141,10 @@ export default function MyExams() {
                   <Button
                     variant={isLive ? 'primary' : 'ghost'}
                     disabled={!isLive}
-                    onClick={() => navigate(`/candidate/exam/${exam._id || exam.id}`)}
+                    onClick={() => startExam(exam._id || exam.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.preventDefault();
+                    }}
                   >
                     {isLive ? 'Start' : 'Not live'}
                   </Button>
