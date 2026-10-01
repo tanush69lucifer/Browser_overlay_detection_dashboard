@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+/* Design system from PS05 section 14. Use as bg-base, bg-surface, text-text, text-danger, border-warn... */
+@theme {
+  --color-base: #0f172a;
+  --color-surface: #1e293b;
+  --color-ok: #22c55e;
+  --color-warn: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #3b82f6;
+  --color-primary: #6366f1;
+  --color-text: #e2e8f0;
+}
+
+html,
+body {
+  background: var(--color-base);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
