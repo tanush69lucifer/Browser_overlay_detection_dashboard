@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
 import { getExams } from '../../api/exams';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -48,25 +47,9 @@ export default function MyExams() {
   };
 
   const startExam = async (examId) => {
-    if (!document.fullscreenElement) {
-      if (!document.documentElement.requestFullscreen) {
-        toast.error('Fullscreen is required to start this exam, but is not supported by this browser.');
-        return;
-      }
-
-      try {
-        await document.documentElement.requestFullscreen();
-      } catch {
-        toast.error('Allow fullscreen to start the exam.');
-        return;
-      }
-
-      if (!document.fullscreenElement) {
-        toast.error('Fullscreen is required to start this exam. Please try again.');
-        return;
-      }
-    }
-
+    // Enter the rules page first. Fullscreen is requested by the explicit
+    // confirmation button there, so the browser handles it in that click's
+    // user-activation context rather than before route navigation.
     navigate(`/candidate/exam/${examId}`);
   };
 

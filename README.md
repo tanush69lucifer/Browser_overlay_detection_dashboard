@@ -70,7 +70,28 @@ Its scalability
 - [API and data contracts](SPEC.md)
 - [Demo extension](demo-overlay/README.md)
 
-Run `cd server && npm run loadtest` with the API running for the health endpoint check. Socket mode requires the documented disposable candidate tokens and sessions. Do not treat the target concurrency as measured until a real run completes.
+### Staged Socket.IO benchmark (50 / 100 / 250 / 500)
+
+This benchmark uses real authenticated candidate sockets, joins each candidate to a unique active session, sends low-risk `WINDOW_BLUR` batches at a configured rate, forces a selected percentage of sockets to reconnect, and records acknowledgement percentiles. An authenticated proctor observer counts signals actually emitted to the exam room. A JSON result and a Markdown proof report are written under `server/loadtest/reports/` after the run; the report includes stage-by-stage pass/fail checks and load-generator resource usage.
+
+1. Start the API in one terminal: `cd server && npm run dev`.
+2. Ensure the demo admin and proctor from the seed script already exist. Run `npm run seed` only if they do not, and only against the development database you intend to use. Then run `npm run loadtest:prepare` to create the fixture. For an intentional Atlas dev-cluster run, PowerShell requires `$env:LOADTEST_ALLOW_REMOTE = '1'` in that terminal first.
+3. Run `npm run loadtest`. Default stages are 50, 100, 250 and 500 concurrent sessions, 30 seconds per stage, 10 batch attempts/second and 10% forced reconnects. Report thresholds default to >=99% connected, >=99% acknowledged, <=1500ms p95 ACK latency and >=99% reconnect success.
+
+Optional PowerShell configuration before step 3:
+
+```powershell
+$env:LOADTEST_URL = 'http://localhost:5000'
+$env:LOADTEST_DURATION_SECONDS = '60'
+$env:LOADTEST_SIGNAL_RATE = '25'
+$env:LOADTEST_RECONNECT_PERCENT = '20'
+$env:LOADTEST_SERVER_PID = (Get-NetTCPConnection -LocalPort 5000 -State Listen | Select-Object -First 1 -ExpandProperty OwningProcess)
+npm run loadtest
+```
+
+Use `LOADTEST_STAGES=50,100` for a quick smoke run, `LOADTEST_RAMP_SECONDS` to change the connection ramp, and `LOADTEST_REPORT_DIR` to choose another report folder. `LOADTEST_SERVER_PID` is optional; without it the report labels server CPU/RSS as not sampled and still records load-generator CPU/RSS plus host free memory. The credentials file contains bearer tokens, is git-ignored, and must not be shared or committed. The prepare step refuses `NODE_ENV=production`; if `MONGO_URI` is a remote `mongodb+srv` cluster, explicitly set `$env:LOADTEST_ALLOW_REMOTE = '1'` only after confirming you intend to create/reset the dedicated test accounts and exam there. Existing account passwords and historical flags are preserved; the benchmark fixture resets dedicated sessions to offline and reuses them without submitting answers.
+
+For the old lightweight checks, set `LOADTEST_MODE=health`, `signals`, or `socket`; the staged benchmark is the default. A report is actual measured evidence only for the target, environment and run recorded inside it—do not generalize one run into a production capacity guarantee.
 
 ## Stack
 
