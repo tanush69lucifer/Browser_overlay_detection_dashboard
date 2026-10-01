@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Proctoring Demo Overlay Helper",
+  "version": "1.0.0",
+  "description": "Simulates an unauthorized floating AI assistant overlay with Alt+O toggle for proctoring test demonstrations.",
+  "permissions": [
+    "activeTab"
+  ],
+  "action": {
+    "default_title": "Toggle Demo Overlay"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "overlay.css"
+      ],
+      "run_at": "document_end"
+    }
+  ],
+  "commands": {
+    "toggle-overlay": {
+      "suggested_key": {
+        "default": "Alt+O",
+        "mac": "Alt+O"
+      },
+      "description": "Toggle floating demo overlay"
+    }
+  }
+}
